@@ -307,7 +307,7 @@ This is observed behaviour, not configured: no workflow in this repository
 rebases dependabot PRs, and `.github/dependabot.yml` sets no
 `rebase-strategy`, so Dependabot's default (`auto`) applies. On 2026-11-02,
 PR #1160 got no rebase comment, yet the timeline
-(`gh api repos/{owner}/{repo}/issues/1160/timeline`) shows
+(`gh api repos/endavis/bastproxy-webclient/issues/1160/timeline`) shows
 `dependabot[bot]` force-pushing it a few minutes after each other
 dependabot PR merged:
 
@@ -365,8 +365,8 @@ processed against the pre-rebase branch and the two can race.
 Poll until the PR's first commit has current `main` as its parent:
 
 ```bash
-main_sha=$(gh api repos/{owner}/{repo}/git/ref/heads/main --jq '.object.sha[0:7]')
-gh api repos/{owner}/{repo}/pulls/<number>/commits --jq '.[0].parents[0].sha[0:7]'
+main_sha=$(gh api repos/endavis/bastproxy-webclient/git/ref/heads/main --jq '.object.sha[0:7]')
+gh api repos/endavis/bastproxy-webclient/pulls/<number>/commits --jq '.[0].parents[0].sha[0:7]'
 ```
 
 When those match, wait for CI (`gh pr checks <number> --watch`) and merge

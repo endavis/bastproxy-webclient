@@ -12,7 +12,7 @@ tags:
 
 This guide covers both package usage and development workflows.
 
-> Looking for the `__PYPI_NAME__` command-line interface? See the
+> Looking for the `bastproxy-webclient` command-line interface? See the
 > [CLI Guide](cli.md) for the console script, subcommands, and how to
 > extend them.
 
@@ -21,7 +21,7 @@ This guide covers both package usage and development workflows.
 ### Basic Usage
 
 ```python
-from __PACKAGE_NAME__ import greet
+from bastproxy_webclient import greet
 
 # Simple greeting
 message = greet("World")
@@ -212,7 +212,7 @@ If your package provides a CLI, create convenience tasks:
 def task_run_server():
     """Start development server."""
     return {
-        "actions": ["uv run __PYPI_NAME__ server --debug --port 8080"],
+        "actions": ["uv run bastproxy-webclient server --debug --port 8080"],
         "title": title_with_actions,
     }
 
@@ -220,9 +220,9 @@ def task_init_db():
     """Initialize database."""
     return {
         "actions": [
-            "uv run __PYPI_NAME__ db create",
-            "uv run __PYPI_NAME__ db migrate",
-            "uv run __PYPI_NAME__ db seed-dev",
+            "uv run bastproxy-webclient db create",
+            "uv run bastproxy-webclient db migrate",
+            "uv run bastproxy-webclient db seed-dev",
         ],
         "title": title_with_actions,
     }
@@ -243,8 +243,8 @@ def task_deploy_dev():
     """Deploy to development environment."""
     return {
         "actions": [
-            "uv run __PYPI_NAME__ validate --env dev",
-            "uv run __PYPI_NAME__ deploy --env dev --auto-approve",
+            "uv run bastproxy-webclient validate --env dev",
+            "uv run bastproxy-webclient deploy --env dev --auto-approve",
         ],
         "title": title_with_actions,
     }
@@ -263,7 +263,7 @@ def task_deploy_prod():
 
         # Run deployment
         subprocess.run(
-            "uv run __PYPI_NAME__ deploy --env prod",
+            "uv run bastproxy-webclient deploy --env prod",
             shell=True,
             check=True
         )
@@ -316,9 +316,9 @@ def task_process_data():
     """Run data processing pipeline."""
     return {
         "actions": [
-            "uv run __PYPI_NAME__ extract --source api --output tmp/raw.json",
-            "uv run __PYPI_NAME__ transform --input tmp/raw.json --output tmp/clean.json",
-            "uv run __PYPI_NAME__ load --input tmp/clean.json --target postgres",
+            "uv run bastproxy-webclient extract --source api --output tmp/raw.json",
+            "uv run bastproxy-webclient transform --input tmp/raw.json --output tmp/clean.json",
+            "uv run bastproxy-webclient load --input tmp/clean.json --target postgres",
         ],
         "title": title_with_actions,
     }
@@ -327,7 +327,7 @@ def task_backup_data():
     """Backup production database."""
     return {
         "actions": [
-            "uv run __PYPI_NAME__ backup create --env prod --output backups/$(date +%Y%m%d-%H%M%S).sql.gz",
+            "uv run bastproxy-webclient backup create --env prod --output backups/$(date +%Y%m%d-%H%M%S).sql.gz",
         ],
         "title": title_with_actions,
     }
@@ -345,7 +345,7 @@ def task_restore_data():
         latest = backups[0]
         print(f"Restoring from: {latest}")
         subprocess.run(
-            f"uv run __PYPI_NAME__ backup restore --file {latest} --env dev",
+            f"uv run bastproxy-webclient backup restore --file {latest} --env dev",
             shell=True,
             check=True
         )
@@ -408,7 +408,7 @@ def task_deploy():
 
         # Deploy
         subprocess.run(
-            f"uv run __PYPI_NAME__ deploy --env {env}",
+            f"uv run bastproxy-webclient deploy --env {env}",
             shell=True,
             check=True
         )
@@ -445,8 +445,8 @@ def task_validate_config():
     """Validate all configuration files."""
     return {
         "actions": [
-            "uv run __PYPI_NAME__ config validate --env dev",
-            "uv run __PYPI_NAME__ config validate --env prod",
+            "uv run bastproxy-webclient config validate --env dev",
+            "uv run bastproxy-webclient config validate --env prod",
         ],
         "title": title_with_actions,
     }
@@ -456,8 +456,8 @@ def task_health_check():
     return {
         "actions": [
             "curl -f http://localhost:8000/health || echo 'Service down!'",
-            "uv run __PYPI_NAME__ db ping",
-            "uv run __PYPI_NAME__ cache status",
+            "uv run bastproxy-webclient db ping",
+            "uv run bastproxy-webclient cache status",
         ],
         "title": title_with_actions,
     }
@@ -472,10 +472,10 @@ def task_generate_models():
     """Generate data models from OpenAPI spec."""
     return {
         "actions": [
-            "uv run datamodel-codegen --input api-spec.yaml --output src/__PACKAGE_NAME__/models/",
+            "uv run datamodel-codegen --input api-spec.yaml --output src/bastproxy_webclient/models/",
         ],
         "file_dep": ["api-spec.yaml"],
-        "targets": ["src/__PACKAGE_NAME__/models/api.py"],
+        "targets": ["src/bastproxy_webclient/models/api.py"],
         "title": title_with_actions,
     }
 
@@ -756,7 +756,7 @@ uv run pytest -v
 uv run mypy --show-error-codes --pretty src/
 
 # Check specific file
-uv run mypy src/__PACKAGE_NAME__/core.py
+uv run mypy src/bastproxy_webclient/core.py
 ```
 
 #### Pre-commit Hook Failures
@@ -818,5 +818,5 @@ uv run pre-commit install
 ## Next Steps
 
 - Check the [API Reference](../reference/api.md) for complete documentation
-- Read [CONTRIBUTING.md](https://github.com/username/package_name/blob/main/.github/CONTRIBUTING.md) for contribution guidelines
+- Read [CONTRIBUTING.md](https://github.com/endavis/bastproxy-webclient/blob/main/.github/CONTRIBUTING.md) for contribution guidelines
 - Review the docs and TODOs in this project to identify improvements

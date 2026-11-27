@@ -16,13 +16,13 @@ Instead, please report them via one of the following methods:
 
 ### Preferred Method: Private Security Advisory
 
-1. Go to the [Security tab](https://github.com/username/package_name/security)
+1. Go to the [Security tab](https://github.com/endavis/bastproxy-webclient/security)
 2. Click "Report a vulnerability"
 3. Fill out the form with details
 
 ### Alternative: Email
 
-Send an email to: security@example.com
+Send an email to: 6662995+endavis@users.noreply.github.com
 
 Include as much information as possible:
 - Type of vulnerability
@@ -60,7 +60,7 @@ This track covers `tools/`, the AI agent hooks and the `doit` tasks. That code r
 1. **Report:** Reproduce the finding, keeping the command and its output, and file it as a private draft security advisory.
 2. **Fix in the open, worded neutrally:** The fix takes the normal Issue → Branch → PR → Merge flow, so CI runs on it. The issue, PR and commit messages describe the change, such as "compare the example to HEAD by content". They never describe the bypass, include reproduction commands or name the advisory.
 3. **Close:** After the merge, close the advisory without publishing it:
-   `gh api -X PATCH repos/{owner}/{repo}/security-advisories/<ghsa_id> -f state=closed`.
+   `gh api -X PATCH repos/endavis/bastproxy-webclient/security-advisories/<ghsa_id> -f state=closed`.
    No CVE is requested.
 
 The fix diff is public between push and merge. That is accepted for development tooling, whose exposure is an agent working in the repository, not users of a release. Temporary private forks would keep it private, but CI does not run in them and a fork PR can be merged only from the advisory page.
@@ -135,7 +135,7 @@ We recognize security researchers who help us keep this project secure:
 
 ## Questions?
 
-If you have questions about this security policy, please open a GitHub issue with the "security" label or contact us at security@example.com.
+If you have questions about this security policy, please open a GitHub issue with the "security" label or contact us at 6662995+endavis@users.noreply.github.com.
 
 ---
 

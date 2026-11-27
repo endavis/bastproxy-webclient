@@ -1,0 +1,9 @@
+[project]
+name = "bastproxy-webclient"
+package_name = "bastproxy_webclient"
+pypi_name = "bastproxy-webclient"
+description = "A web client for bastproxy"
+author_name = "Bast"
+author_email = "6662995+endavis@users.noreply.github.com"
+github_user = "endavis"
+github_repo = "bastproxy-webclient"

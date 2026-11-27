@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from package_name.core import greet
+from bastproxy_webclient.core import greet
 
 
 @pytest.mark.benchmark

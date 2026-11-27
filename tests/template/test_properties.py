@@ -11,7 +11,7 @@ import pytest
 from hypothesis import example, given
 from hypothesis import strategies as st
 
-from package_name.core import greet
+from bastproxy_webclient.core import greet
 
 # ---------------------------------------------------------------------------
 # greet

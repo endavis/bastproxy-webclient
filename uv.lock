@@ -142,6 +142,79 @@ wheels = [
 ]
 
 [[package]]
+name = "bastproxy-webclient"
+source = { editable = "." }
+dependencies = [
+    { name = "click" },
+    { name = "rich" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "codespell" },
+    { name = "commitizen" },
+    { name = "doit" },
+    { name = "hypothesis" },
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extra = ["python"] },
+    { name = "mutmut" },
+    { name = "mypy" },
+    { name = "pre-commit" },
+    { name = "pymdown-extensions" },
+    { name = "pyproject-fmt" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-benchmark" },
+    { name = "pytest-cov" },
+    { name = "pytest-xdist" },
+    { name = "pyyaml" },
+    { name = "radon" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+    { name = "vulture" },
+]
+security = [
+    { name = "bandit" },
+    { name = "cyclonedx-bom" },
+    { name = "pip" },
+    { name = "pip-audit" },
+    { name = "pip-licenses" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bandit", marker = "extra == 'security'", specifier = ">=1.7" },
+    { name = "click", specifier = ">=8.5.1" },
+    { name = "codespell", marker = "extra == 'dev'", specifier = ">=2.4.3" },
+    { name = "commitizen", marker = "extra == 'dev'", specifier = ">=4.19.3" },
+    { name = "cyclonedx-bom", marker = "extra == 'security'", specifier = ">=8.0.1" },
+    { name = "doit", marker = "extra == 'dev'", specifier = ">=0.36.0" },
+    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.170.15" },
+    { name = "mkdocs-material", marker = "extra == 'dev'", specifier = ">=9.8.1" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'dev'", specifier = ">=1.0.8" },
+    { name = "mutmut", marker = "extra == 'dev'", specifier = ">=3.8.1" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=2.4.1" },
+    { name = "pip", marker = "extra == 'security'", specifier = ">=26.3" },
+    { name = "pip-audit", marker = "extra == 'security'", specifier = ">=2.10.1" },
+    { name = "pip-licenses", marker = "extra == 'security'", specifier = ">=4.0" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.7.0" },
+    { name = "pymdown-extensions", marker = "extra == 'dev'", specifier = ">=13.1" },
+    { name = "pyproject-fmt", marker = "extra == 'dev'", specifier = ">=2.30.6" },
+    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.414" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.2.0" },
+    { name = "pytest-benchmark", marker = "extra == 'dev'", specifier = ">=5.3.1" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5" },
+    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "radon", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "rich", specifier = ">=15.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.5" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20261113" },
+    { name = "vulture", marker = "extra == 'dev'", specifier = ">=2.11" },
+]
+provides-extras = ["dev", "security"]
+
+[[package]]
 name = "boolean-py"
 version = "5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1378,79 +1451,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/24/bf/d1bda4f6168e0b2e9
 wheels = [
     { url = "https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl", hash = "sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827", size = 23438, upload-time = "2025-12-20T14:08:52.782Z" },
 ]
-
-[[package]]
-name = "package-name"
-source = { editable = "." }
-dependencies = [
-    { name = "click" },
-    { name = "rich" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "codespell" },
-    { name = "commitizen" },
-    { name = "doit" },
-    { name = "hypothesis" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings", extra = ["python"] },
-    { name = "mutmut" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pymdown-extensions" },
-    { name = "pyproject-fmt" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-benchmark" },
-    { name = "pytest-cov" },
-    { name = "pytest-xdist" },
-    { name = "pyyaml" },
-    { name = "radon" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-    { name = "vulture" },
-]
-security = [
-    { name = "bandit" },
-    { name = "cyclonedx-bom" },
-    { name = "pip" },
-    { name = "pip-audit" },
-    { name = "pip-licenses" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "bandit", marker = "extra == 'security'", specifier = ">=1.7" },
-    { name = "click", specifier = ">=8.5.1" },
-    { name = "codespell", marker = "extra == 'dev'", specifier = ">=2.4.3" },
-    { name = "commitizen", marker = "extra == 'dev'", specifier = ">=4.19.3" },
-    { name = "cyclonedx-bom", marker = "extra == 'security'", specifier = ">=8.0.1" },
-    { name = "doit", marker = "extra == 'dev'", specifier = ">=0.36.0" },
-    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.170.15" },
-    { name = "mkdocs-material", marker = "extra == 'dev'", specifier = ">=9.8.1" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'dev'", specifier = ">=1.0.8" },
-    { name = "mutmut", marker = "extra == 'dev'", specifier = ">=3.8.1" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=2.4.1" },
-    { name = "pip", marker = "extra == 'security'", specifier = ">=26.3" },
-    { name = "pip-audit", marker = "extra == 'security'", specifier = ">=2.10.1" },
-    { name = "pip-licenses", marker = "extra == 'security'", specifier = ">=4.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.7.0" },
-    { name = "pymdown-extensions", marker = "extra == 'dev'", specifier = ">=13.1" },
-    { name = "pyproject-fmt", marker = "extra == 'dev'", specifier = ">=2.30.6" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.414" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.2.0" },
-    { name = "pytest-benchmark", marker = "extra == 'dev'", specifier = ">=5.3.1" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
-    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5" },
-    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
-    { name = "radon", marker = "extra == 'dev'", specifier = ">=6.0" },
-    { name = "rich", specifier = ">=15.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.5" },
-    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20261113" },
-    { name = "vulture", marker = "extra == 'dev'", specifier = ">=2.11" },
-]
-provides-extras = ["dev", "security"]
 
 [[package]]
 name = "packageurl-python"

@@ -1,5 +1,5 @@
 ---
-title: __PROJECT_NAME__ Documentation
+title: bastproxy-webclient Documentation
 description: Welcome and overview of the project
 audience:
   - users
@@ -9,13 +9,13 @@ tags:
   - getting-started
 ---
 
-# __PROJECT_NAME__ Documentation
+# bastproxy-webclient Documentation
 
-Welcome to the documentation for __PROJECT_NAME__!
+Welcome to the documentation for bastproxy-webclient!
 
 ## Overview
 
-__PROJECT_NAME__ is a modern Python project template with comprehensive tooling for development, testing, documentation, and deployment.
+bastproxy-webclient is a modern Python project template with comprehensive tooling for development, testing, documentation, and deployment.
 
 ## Quick Links
 
@@ -44,7 +44,7 @@ __PROJECT_NAME__ is a modern Python project template with comprehensive tooling 
 ## Quick Start
 
 ```python
-from __PACKAGE_NAME__ import greet
+from bastproxy_webclient import greet
 
 # Simple greeting example
 message = greet("Python")

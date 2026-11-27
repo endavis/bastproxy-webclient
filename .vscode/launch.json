@@ -32,7 +32,7 @@
     {
       "id": "moduleName",
       "type": "promptString",
-      "description": "Module name to run (e.g., package_name)"
+      "description": "Module name to run (e.g., bastproxy_webclient)"
     },
     {
       "id": "moduleArgs",

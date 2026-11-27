@@ -118,7 +118,7 @@ runs, and it already does what a hand-rolled `tests.yml` would:
 | **Matrix** | derived from `.github/python-versions.json` via `.github/actions/python-versions`, not hardcoded — so a version policy change moves one file |
 | **Platforms** | `ubuntu-latest` and `windows-latest` on pull requests, plus `macos-latest` when `all_os` is set (see [CI Matrix Strategy](#ci-matrix-strategy)) |
 | **Checks** | the `lint` and `docs` jobs run `doit` tasks, so CI and a local run cannot diverge; the `test` job calls `pytest` directly (see [Pipeline Jobs](#pipeline-jobs)) |
-| **Coverage** | `package_name` **and** `tools/`, gated by `fail_under` in `pyproject.toml` |
+| **Coverage** | `bastproxy_webclient` **and** `tools/`, gated by `fail_under` in `pyproject.toml` |
 | **Actions** | pinned to commit SHAs with a `# vX.Y.Z` comment (see [Action pinning](#action-pinning-and-workflow-permissions)) |
 | **Interpreter** | every job that sets up Python and then runs uv sets `UV_PYTHON` to that version, so `uv sync` and `uv run` use it instead of the one in `.python-version`; a `Check the Python version` step fails the job if uv runs another one (#1261) |
 | **uv cache** | `astral-sh/setup-uv` with `enable-cache: true`, keyed on `uv.lock`; no separate `actions/cache` step or `UV_CACHE_DIR`. It is faster than `actions/cache`, most of all on Windows (timings in #1266) |
@@ -273,13 +273,13 @@ both properties.
 ### Coverage Requirements
 
 - **Enforced threshold**: `fail_under = 70` in `pyproject.toml`
-- **Measured scope**: `package_name` **and** `tools/`
+- **Measured scope**: `bastproxy_webclient` **and** `tools/`
 - **Artifacts**: Upload HTML coverage reports for review
 - **Integration**: Use Codecov or similar service for tracking
 
 #### What the gate measures, and why
 
-The gate covers `tools/` as well as the package. `src/package_name/` is the skeleton every
+The gate covers `tools/` as well as the package. `src/bastproxy_webclient/` is the skeleton every
 downstream project deletes and replaces; `tools/` is the code that runs releases, creates PRs and
 blocks dangerous commands. Gating only the package produced a healthy-looking number over ~66
 statements while several thousand statements of tooling went unmeasured.

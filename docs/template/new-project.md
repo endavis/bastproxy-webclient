@@ -160,7 +160,7 @@ The `configure.py` script:
    - `docs/*` - Documentation content
 
 2. **Renames the source directory**:
-   - `src/package_name/` → `src/your_package_name/`
+   - `src/bastproxy_webclient/` → `src/your_bastproxy_webclient/`
 
 3. **Updates badge URLs** for CI, coverage, and PyPI
 
@@ -270,7 +270,7 @@ Manually configure what the automated setup does automatically:
 
 After setup is complete:
 
-1. **Start coding** in `src/your_package_name/`
+1. **Start coding** in `src/your_bastproxy_webclient/`
 2. **Write tests** in `tests/`
 3. **Update documentation** in `docs/`
 4. **Follow the workflow**: Issue → Branch → Commit → PR → Merge

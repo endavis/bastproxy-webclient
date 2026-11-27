@@ -57,8 +57,8 @@ Added an LRU cache in front of the provider's network calls (no plan needed —
 single-file change with one reasonable approach).
 
 ## Files changed
-- `src/__PACKAGE_NAME__/cache.py` — new LRU cache wrapper
-- `src/__PACKAGE_NAME__/provider.py` — wraps lookups in the cache
+- `src/bastproxy_webclient/cache.py` — new LRU cache wrapper
+- `src/bastproxy_webclient/provider.py` — wraps lookups in the cache
 - `tests/test_cache.py` — hit, miss, eviction-order tests
 
 ## PR

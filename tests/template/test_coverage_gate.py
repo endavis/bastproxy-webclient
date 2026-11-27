@@ -1,6 +1,6 @@
 """Contract tests for the enforced coverage gate.
 
-The gate previously measured only ``src/package_name/`` — a 66-statement
+The gate previously measured only ``src/bastproxy_webclient/`` — a 66-statement
 skeleton that every downstream project deletes — while several thousand
 statements of `tools/` went unmeasured. These tests pin the scope so that
 narrowing it back is a deliberate, visible change rather than a silent one.
@@ -36,7 +36,7 @@ def test_gate_measures_both_the_package_and_tools() -> None:
         "tools/ runs releases, PRs and the dangerous-command hook; it must be measured"
     )
 
-    # The package entry is `package_name` here and the real package name in a
+    # The package entry is `bastproxy_webclient` here and the real package name in a
     # spawned project, because configure.py rewrites it. Assert that it resolves
     # to a package rather than pinning the placeholder, so this test keeps
     # working downstream (#731).

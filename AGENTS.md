@@ -117,7 +117,7 @@ Some of these are blocked in code as well as forbidden here — committing to `m
 
 Configuration turns this template into a project. Know which layer a file belongs to before editing it:
 
-- **The package**: `src/package_name/`, renamed to the project's package on configuration.
+- **The package**: `src/bastproxy_webclient/`, renamed to the project's package on configuration.
 - **Dev tooling that ships**: `tools/doit/`, `tools/hooks/` and their tests. The tests ship too; shedding them broke a spawned project's coverage gate (#731).
 - **Template-owned, shed on configuration**: `tools/pyproject_template/`, `bootstrap.py`, `README.template.md` (renamed onto `README.md`), and only the tests in `TEMPLATE_OWNED_TEST_FILES`. `tests/template/` is not shed wholesale.
 
@@ -161,7 +161,7 @@ When a security review (a plugin, a review skill, another agent) reports finding
 belong to the current change. Never put an unfixed finding in a public issue, PR, comment or commit
 message ([SECURITY.md](.github/SECURITY.md)). Reproduce it first, keeping the command and its
 output, then file it as a private draft security advisory, one per finding:
-`gh api -X POST repos/{owner}/{repo}/security-advisories --input <file>`, with `summary`,
+`gh api -X POST repos/endavis/bastproxy-webclient/security-advisories --input <file>`, with `summary`,
 `description`, `severity` and `vulnerabilities` (package ecosystem `other`). If the call is refused,
 stop and ask the user; never fall back to a public issue. Do not keep extending the current PR;
 triage is the repo admin's call.
@@ -250,7 +250,7 @@ git branch -a
 gh issue view 42
 gh pr view 123
 gh pr checks
-gh api repos/{owner}/{repo}/pulls/123/comments
+gh api repos/endavis/bastproxy-webclient/pulls/123/comments
 gh issue list --label "bug"
 gh pr list --state open
 ```

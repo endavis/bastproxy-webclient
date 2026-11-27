@@ -19,12 +19,12 @@ Accepted
 
 Use **[click](https://click.palletsprojects.com/)** as the framework for
 the package's user-facing command-line interface. The CLI lives at
-`src/__PACKAGE_NAME__/cli.py` and is registered as a console script via
+`src/bastproxy_webclient/cli.py` and is registered as a console script via
 `[project.scripts]` in `pyproject.toml`:
 
 ```toml
 [project.scripts]
-__PYPI_NAME__ = "__PACKAGE_NAME__.cli:main"
+bastproxy-webclient = "bastproxy_webclient.cli:main"
 ```
 
 `click` is added to `[project] dependencies` as a runtime dependency
@@ -41,7 +41,7 @@ grounds the new [CLI Guide](../usage/cli.md) in real code.
 The runtime/dev split documented in
 [ADR-9002](9002-use-doit-for-task-automation.md)
 and [Tooling Roles and Architectural Boundaries](../development/tooling-roles.md)
-requires the application CLI to live under `src/__PACKAGE_NAME__/` and to be
+requires the application CLI to live under `src/bastproxy_webclient/` and to be
 runnable without any dev tooling (no `doit`, no `uv`). A standardized
 runtime CLI framework is needed to make that boundary concrete.
 
@@ -78,9 +78,9 @@ runtime CLI framework is needed to make that boundary concrete.
 **Positive:**
 
 - The template now has a concrete, testable CLI surface that contributors
-  can extend by copying the pattern in `src/__PACKAGE_NAME__/cli.py`.
+  can extend by copying the pattern in `src/bastproxy_webclient/cli.py`.
 - The runtime/dev boundary is enforceable: end users of the published
-  package run `__PYPI_NAME__ ...` without needing `doit` installed.
+  package run `bastproxy-webclient ...` without needing `doit` installed.
 - New subcommands have one obvious home and one obvious test pattern.
 
 **Negative:**

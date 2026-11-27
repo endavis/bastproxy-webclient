@@ -217,7 +217,7 @@ and, for a nested CLI, a read-only home directory.
 **Write steps.** `.codex/rules/gh.rules` allows only `gh pr {view,diff,checks,list}` and `gh issue
 {view,list}` — see [Command Blocking — Codex CLI](command-blocking.md#codex-cli). Everything else
 these workflows need — `gh pr comment` / `gh issue comment` (the `multi-*` posting steps), `gh api
-repos/{owner}/{repo}/actions/jobs/<id>/logs` (`implement-issue`'s CI loop), and `doit pr` — matches
+repos/endavis/bastproxy-webclient/actions/jobs/<id>/logs` (`implement-issue`'s CI loop), and `doit pr` — matches
 no allow rule, so it runs inside the sandbox with no network and fails.
 
 **Delegation.** Measured against the #975 run record (issue #975, comment

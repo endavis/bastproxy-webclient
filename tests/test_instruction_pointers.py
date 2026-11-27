@@ -23,7 +23,7 @@ same for the third shape.
 
 A fourth kind of skip layers on top of all three: a downstream project lists in
 `.config/pyproject_template/sync-exclude.toml` (ADR-9026) upstream-only targets it
-did not adopt (`docs/template/*.md`, `src/package_name/core.py`, and so on). A
+did not adopt (`docs/template/*.md`, `src/bastproxy_webclient/core.py`, and so on). A
 pointer whose target name matches one of those patterns is skipped rather than
 reported missing. Upstream has no such file, so this is a no-op here.
 """

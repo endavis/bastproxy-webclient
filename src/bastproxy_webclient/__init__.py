@@ -1,4 +1,4 @@
-"""Package Name - A short description of your package."""
+"""bastproxy-webclient - A web client for bastproxy."""
 
 from ._version import __version__
 from .core import greet

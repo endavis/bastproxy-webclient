@@ -13,7 +13,7 @@ tags:
 Bring your existing Python project into the pyproject-template.
 
 > **How much of this is automated:** steps 2, 3 and 12. Copying is two `rsync` invocations,
-> `manage.py configure` rewrites every placeholder and renames `src/package_name` to your
+> `manage.py configure` rewrites every placeholder and renames `src/bastproxy_webclient` to your
 > package, and `manage.py repo` applies the GitHub-side configuration a new project gets
 > automatically. The rest is judgement about your own code: which dependencies to carry
 > over, how imports change when moving to a `src/` layout. Work through the checklist.
@@ -122,7 +122,7 @@ Everything else is copied, including the parts a hand-written list tends to miss
 - From your project root: `python tools/pyproject_template/manage.py`.
 - Select **[2] Configure project** to run the configurator.
 - Provide project name, package name (import), PyPI name, author, GitHub user, description.
-- **What it does:** Rewrites placeholders (badges/links/docs/workflows), renames `src/package_name → src/<your_package>`.
+- **What it does:** Rewrites placeholders (badges/links/docs/workflows), renames `src/bastproxy_webclient → src/<your_package>`.
 - When it detects a migration backup in `tmp/`, the configurator prints pointers to the remaining steps (step 6 cleanup) at the end of its run.
 
 See [Template Management](manage.md) for full documentation on the management script.

@@ -79,7 +79,7 @@ listing upstream-relative glob patterns:
 ```toml
 exclude = [
     "examples/api/**",
-    "src/package_name/core.py",
+    "src/bastproxy_webclient/core.py",
     "tests/test_cli.py",
 ]
 ```

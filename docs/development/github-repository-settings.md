@@ -24,7 +24,7 @@ For the initial setup workflow, see the [New Project Setup](../template/new-proj
 ## Required Permissions
 
 `manage.py repo` (which calls `update_all_repo_settings()`) starts with `check_admin_access()`:
-one `GET /repos/{owner}/{repo}` call that reads `.permissions.admin`. Every step below --
+one `GET /repos/endavis/bastproxy-webclient` call that reads `.permissions.admin`. Every step below --
 the repository-settings `PATCH`, the ruleset `POST`/`PUT` calls, and the CodeQL
 default-setup check -- needs the repository's **Administration** permission, so this
 single up-front check turns a missing permission into one clear message instead of a
@@ -299,7 +299,7 @@ adopting `codeql.yml` does need one: GitHub refuses to process SARIF
 uploaded by an advanced workflow while default setup stays enabled, so every
 `CodeQL` run fails until default setup is switched off. `update_all_repo_settings()`
 checks this with `disable_codeql_default_setup()`: `GET
-/repos/{owner}/{repo}/code-scanning/default-setup`, and if its `state` is
+/repos/endavis/bastproxy-webclient/code-scanning/default-setup`, and if its `state` is
 `configured`, `PATCH ... {"state": "not-configured"}`. A 403 from either call
 warns instead of failing the run -- it can mean the token lacks the
 Administration permission, that GitHub Advanced Security isn't enabled for
