@@ -18,8 +18,6 @@ export const ALLOWED_LICENSES = new Set([
   "0BSD",
   "BlueOak-1.0.0",
   "CC0-1.0",
-  "Python-2.0",
-  "Unlicense",
 ]);
 
 /**

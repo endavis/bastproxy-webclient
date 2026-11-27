@@ -70,7 +70,11 @@ found. The check is `_built_index_failures` in `tools/doit/web.py`.
 every package in `package-lock.json` and accepts only the licenses in `ALLOWED_LICENSES` at the top
 of the script (an SPDX `OR` passes if any side is allowed, `AND` needs every side). A package with a
 missing or `UNKNOWN` license fails, and the script names each offender with its path, version and
-license. It also accepts `MIT-0`, which `jsdom` pulls in through `@csstools/*`. Two packages are MPL-2.0, a file-level copyleft license, and both are used
+license. The allowlist is `MIT`, `MIT-0`, `ISC`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`,
+`0BSD`, `BlueOak-1.0.0`, `CC0-1.0`, `CC-BY-3.0`, `CC-BY-4.0` and `MPL-2.0`, each approved by the
+repo admin. A license outside it is a decision for the repo admin, not an edit to the list. `MIT-0`
+comes in with `jsdom` through `@csstools/*`, and `CC-BY-3.0` is the license-data package
+`spdx-exceptions`. Two packages are MPL-2.0, a file-level copyleft license, and both are used
 at build time only: `eslint-plugin-no-unsanitized` and `lightningcss` (a dependency of Vite). Every
 npm package is a `devDependency`, pinned to an exact version.
 

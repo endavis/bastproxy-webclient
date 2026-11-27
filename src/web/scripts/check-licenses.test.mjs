@@ -13,19 +13,25 @@ import {
 } from "./check-licenses.mjs";
 
 describe("isAllowed", () => {
-  it.each(["MIT", "MIT-0", "ISC", "Apache-2.0", "MPL-2.0", "CC-BY-4.0", "0BSD", "Unlicense"])(
+  it.each(["MIT", "MIT-0", "ISC", "Apache-2.0", "MPL-2.0", "CC-BY-4.0", "0BSD", "BlueOak-1.0.0"])(
     "allows %s",
     (license) => {
       expect(isAllowed(license)).toBe(true);
     },
   );
 
-  it.each(["GPL-3.0-only", "AGPL-3.0", "UNKNOWN", "UNLICENSED", "", "   "])(
-    "rejects %s",
-    (license) => {
-      expect(isAllowed(license)).toBe(false);
-    },
-  );
+  it.each([
+    "GPL-3.0-only",
+    "AGPL-3.0",
+    "Unlicense",
+    "Python-2.0",
+    "UNKNOWN",
+    "UNLICENSED",
+    "",
+    "   ",
+  ])("rejects %s", (license) => {
+    expect(isAllowed(license)).toBe(false);
+  });
 
   it("rejects a missing or non-string license", () => {
     expect(isAllowed(undefined)).toBe(false);
