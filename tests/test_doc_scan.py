@@ -63,7 +63,7 @@ class TestIsExcluded:
         assert is_excluded("docs/template/manage.md", ["docs/template/**"])
 
     def test_no_match(self) -> None:
-        assert not is_excluded("docs/template/manage.md", ["src/package_name/**"])
+        assert not is_excluded("docs/template/manage.md", ["src/bastproxy_webclient/**"])
 
     def test_no_patterns(self) -> None:
         assert not is_excluded("docs/template/manage.md", [])

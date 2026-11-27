@@ -99,7 +99,7 @@ advanced workflow. That is every repository that synced the template rather than
 fresh from it, if it ever used GitHub's own CodeQL setup.
 
 **What changed.** `update_all_repo_settings()` now checks `GET
-/repos/{owner}/{repo}/code-scanning/default-setup` and, if `state` is `configured`, disables it
+/repos/endavis/bastproxy-webclient/code-scanning/default-setup` and, if `state` is `configured`, disables it
 with `PATCH ... {"state": "not-configured"}`. GitHub refuses to process SARIF uploaded by an
 advanced workflow while default setup stays enabled, so every `CodeQL` check run failed until
 someone disabled it by hand (endavis/bastproxy#9).
@@ -250,7 +250,7 @@ Release PRs on `release/v*` branches are now exempt from Validate Issue Link, an
 ### Reset the placeholder `CHANGELOG.md` before your first `doit release`
 
 Template sync does not touch `CHANGELOG.md`. Projects made from an older template carry its
-placeholder: `0.1.0` bullets, a `## [0.1.0] - YYYY-MM-DD` section and `username/package_name` link
+placeholder: `0.1.0` bullets, a `## [0.1.0] - YYYY-MM-DD` section and `endavis/bastproxy-webclient` link
 references. With `update_changelog_on_bump = true`, `cz changelog --incremental` keeps all of it, so
 it lands in your first generated release (issue #1313). Reset `CHANGELOG.md` to its header followed
 by an empty `## [Unreleased]` heading before that release.
@@ -308,7 +308,7 @@ now discover markdown through `git ls-files` instead of walking the filesystem w
 skip list, and skip a link or documented-path target that matches a pattern in
 `.config/pyproject_template/sync-exclude.toml`. If you adopted a shared skill or a 9xxx ADR that
 links to a template-only page you chose not to adopt (`docs/template/*.md`,
-`src/package_name/core.py`, and so on), add that path to `sync-exclude.toml` rather than editing
+`src/bastproxy_webclient/core.py`, and so on), add that path to `sync-exclude.toml` rather than editing
 the adopted file. A new helper module, `tests/doc_scan.py`, ships alongside the three tests and
 must be adopted with them — see
 [AI Sync Checklist](ai-sync-checklist.md#phase-1-sync-template-management-tools-always-run-first).

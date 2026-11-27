@@ -185,7 +185,7 @@ config — so it cannot be auto-provisioned per-clone. This mirrors how
 ### Example Output
 
 ```
-📁 pyproject-template | 🐍 package-name | Python: 3.12.12
+📁 pyproject-template | 🐍 bastproxy-webclient | Python: 3.12.12
 @endavis | 🔀 main (0 files uncommitted, synced 5m ago) | ● working
 Gemini 3 Pro | ██░░░░░░░░ 12% of 1048k tokens
 ```
@@ -249,7 +249,7 @@ export AGY_STATUSLINE_EXTRAS=1
 Example with the segment enabled:
 
 ```
-📁 pyproject-template | 🐍 package-name | Python: 3.12.12
+📁 pyproject-template | 🐍 bastproxy-webclient | Python: 3.12.12
 @endavis | 🔀 main (0 files uncommitted, synced 5m ago) | ● working
 Gemini 3 Pro | ██░░░░░░░░ 12% of 1048k tokens | 5h:0% · wk:1% · 🔒
 ```

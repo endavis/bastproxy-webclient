@@ -67,7 +67,7 @@ checkout.
 The exclusion half addresses a separate failure: a downstream project that adopts a template-owned
 file verbatim (a 9xxx ADR, a shared skill such as `deprecate-api` or `template-sync`) inherits that
 file's links to template-only pages the project did not adopt — `docs/template/*.md`,
-`docs/development/tooling-roles.md`, `src/package_name/core.py`, `tests/test_core.py`. The only ways
+`docs/development/tooling-roles.md`, `src/bastproxy_webclient/core.py`, `tests/test_core.py`. The only ways
 to pass the tests without this ADR were editing the adopted file (undone by the next sync) or
 adopting documentation the project deliberately excluded. `sync-exclude.toml` already exists for
 exactly this shape of problem — "upstream files a project intentionally does not adopt" — so reusing

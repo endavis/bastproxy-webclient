@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from package_name.logging import get_logger, setup_logging
+from bastproxy_webclient.logging import get_logger, setup_logging
 
 
 @pytest.mark.benchmark

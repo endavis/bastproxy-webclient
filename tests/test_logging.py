@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from package_name.logging import (
+from bastproxy_webclient.logging import (
     SimpleConsoleFormatter,
     StructuredFileFormatter,
     get_logger,

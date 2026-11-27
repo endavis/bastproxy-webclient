@@ -112,7 +112,7 @@ def _results_lines(counts: dict[str, int]) -> list[str]:
     """Return ``mutmut results --all true`` lines for *counts* mutants of each status."""
     statuses = [status for status, count in counts.items() for _ in range(count)]
     return [
-        f"    package_name.core.x_greet__mutmut_{n}: {status}"
+        f"    bastproxy_webclient.core.x_greet__mutmut_{n}: {status}"
         for n, status in enumerate(statuses, start=1)
     ]
 

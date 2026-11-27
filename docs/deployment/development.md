@@ -28,7 +28,7 @@ uv sync --all-extras --dev
 doit test
 
 # Start development
-uv run python -m __PACKAGE_NAME__
+uv run python -m bastproxy_webclient
 ```
 
 ## Environment Setup
@@ -114,13 +114,13 @@ The recommended way to run commands:
 
 ```bash
 # Run the main module
-uv run python -m __PACKAGE_NAME__
+uv run python -m bastproxy_webclient
 
 # Run a specific script
 uv run python scripts/example.py
 
 # Run with arguments
-uv run python -m __PACKAGE_NAME__ --verbose
+uv run python -m bastproxy_webclient --verbose
 ```
 
 ### Using doit Tasks
@@ -152,7 +152,7 @@ If you've activated the virtual environment:
 source .venv/bin/activate
 
 # Then run directly
-python -m __PACKAGE_NAME__
+python -m bastproxy_webclient
 ```
 
 ## Development Workflow
@@ -213,7 +213,7 @@ Add to `.vscode/launch.json`:
       "name": "Python: Module",
       "type": "debugpy",
       "request": "launch",
-      "module": "__PACKAGE_NAME__",
+      "module": "bastproxy_webclient",
       "cwd": "${workspaceFolder}",
       "envFile": "${workspaceFolder}/.env"
     },
@@ -233,7 +233,7 @@ Add to `.vscode/launch.json`:
 
 1. Go to **Run > Edit Configurations**
 2. Add new **Python** configuration
-3. Set **Module name**: `__PACKAGE_NAME__`
+3. Set **Module name**: `bastproxy_webclient`
 4. Set **Working directory**: project root
 5. Add **Environment variables** from `.env`
 
@@ -241,11 +241,11 @@ Add to `.vscode/launch.json`:
 
 ```bash
 # Using pdb
-uv run python -m pdb -m __PACKAGE_NAME__
+uv run python -m pdb -m bastproxy_webclient
 
 # Using breakpoint() in code
 # Add breakpoint() where you want to stop, then run normally
-uv run python -m __PACKAGE_NAME__
+uv run python -m bastproxy_webclient
 ```
 
 ## Local Services
@@ -372,7 +372,7 @@ uv sync --all-extras --dev
 doit install_dev
 
 # Verify installation
-uv run python -c "import __PACKAGE_NAME__; print(__PACKAGE_NAME__.__version__)"
+uv run python -c "import bastproxy_webclient; print(bastproxy_webclient.__version__)"
 ```
 
 #### Permission Denied
@@ -468,13 +468,13 @@ For web applications or services that support it:
 
 ```bash
 # Using uvicorn with reload
-uv run uvicorn __PACKAGE_NAME__.app:app --reload
+uv run uvicorn bastproxy_webclient.app:app --reload
 
 # Using Flask debug mode
 FLASK_DEBUG=1 uv run flask run
 
 # Using watchfiles for custom scripts
-uv run watchfiles "python -m __PACKAGE_NAME__" src/
+uv run watchfiles "python -m bastproxy_webclient" src/
 ```
 
 ## Performance Profiling
@@ -483,7 +483,7 @@ uv run watchfiles "python -m __PACKAGE_NAME__" src/
 
 ```bash
 # Using cProfile
-uv run python -m cProfile -o profile.stats -m __PACKAGE_NAME__
+uv run python -m cProfile -o profile.stats -m bastproxy_webclient
 
 # Analyze results
 uv run python -c "import pstats; p = pstats.Stats('profile.stats'); p.sort_stats('cumulative').print_stats(20)"
@@ -536,21 +536,21 @@ uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-xxxxxxxxxxxx
 
 ```bash
 # Install from TestPyPI
-uv pip install --index-url https://test.pypi.org/simple/ __PYPI_NAME__
+uv pip install --index-url https://test.pypi.org/simple/ bastproxy-webclient
 
 # If your package has dependencies from real PyPI, use both indexes
-uv pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ __PYPI_NAME__
+uv pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bastproxy-webclient
 ```
 
 ### Verify Package
 
 ```bash
 # Check the package page
-# https://test.pypi.org/project/__PYPI_NAME__/
+# https://test.pypi.org/project/bastproxy-webclient/
 
 # Verify installation works
 uv venv /tmp/test-install
-uv pip install --python /tmp/test-install --index-url https://test.pypi.org/simple/ __PYPI_NAME__
+uv pip install --python /tmp/test-install --index-url https://test.pypi.org/simple/ bastproxy-webclient
 ```
 
 ### Common Issues

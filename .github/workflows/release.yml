@@ -58,8 +58,8 @@ jobs:
       - name: Show resolved version
         run: |
           uv run python - <<'PY'
-          import package_name
-          print(f"Resolved version: {package_name.__version__}")
+          import bastproxy_webclient
+          print(f"Resolved version: {bastproxy_webclient.__version__}")
           PY
 
       - name: Build artifacts

@@ -473,7 +473,7 @@ COPY --chown=appuser:appuser . .
 
 USER appuser
 
-CMD ["python", "-m", "__PACKAGE_NAME__"]
+CMD ["python", "-m", "bastproxy_webclient"]
 ```
 
 ### Read-only Filesystems
@@ -655,8 +655,8 @@ jobs:
 uv build
 
 # This creates:
-# - dist/__PACKAGE_NAME__-x.y.z.tar.gz (source distribution)
-# - dist/__PACKAGE_NAME__-x.y.z-py3-none-any.whl (wheel)
+# - dist/bastproxy_webclient-x.y.z.tar.gz (source distribution)
+# - dist/bastproxy_webclient-x.y.z-py3-none-any.whl (wheel)
 
 # Publish to PyPI
 uv publish
@@ -669,11 +669,11 @@ uv publish --token pypi-xxxxxxxxxxxx
 
 ```bash
 # Check package on PyPI
-pip index versions __PYPI_NAME__
+pip index versions bastproxy-webclient
 
 # Test installation in clean environment
 uv venv /tmp/test-install
-uv pip install --python /tmp/test-install __PYPI_NAME__
+uv pip install --python /tmp/test-install bastproxy-webclient
 ```
 
 ### Version Management

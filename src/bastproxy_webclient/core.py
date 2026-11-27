@@ -1,4 +1,4 @@
-"""Core functionality for package_name."""
+"""Core functionality for bastproxy_webclient."""
 
 
 def greet(name: str = "World") -> str:

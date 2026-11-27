@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Basic usage example for package_name.
+"""Basic usage example for bastproxy_webclient.
 
 This example demonstrates the most common usage patterns for the package.
 """
 
-from package_name import __version__, get_logger, greet, setup_logging
+from bastproxy_webclient import __version__, get_logger, greet, setup_logging
 
 
 def main() -> None:
     """Run basic usage examples."""
     # Display package version
-    print(f"Using package_name version {__version__}")
+    print(f"Using bastproxy_webclient version {__version__}")
     print()
 
     # Example 1: Basic operation
