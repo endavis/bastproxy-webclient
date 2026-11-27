@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795807843156,
+  "lastUpdate": 1795810695523,
   "repoUrl": "https://github.com/endavis/bastproxy-webclient",
   "entries": {
     "Benchmark": [
@@ -118,6 +118,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 1.9907092665529327e-7",
             "extra": "mean: 2.211050266597329 usec\nrounds: 47825"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "6662995+endavis@users.noreply.github.com",
+            "name": "Eric Davis",
+            "username": "endavis"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2fca3f37996f5367e16d20b2fca7dbe25013ebc5",
+          "message": "feat: add the Svelte web app under src/web/ with doit tasks and CI (merges PR #11, addresses #7)\n\n* feat: add the Svelte web app under src/web with doit tasks and CI\n\nAdd a Vite, Svelte 5 and TypeScript app under src/web/ with a relative\nbase so the build works at /webclient/ and fits the proxy CSP.\n\n- web checks that mirror the Python ones: ESLint, Prettier, tsc and\n  svelte-check, Vitest coverage, knip, npm audit, a lockfile license\n  allowlist script and a CycloneDX SBOM\n- doit web_* tasks in tools/doit/web.py; doit check, audit, licenses and\n  sbom cover the web app; web_build checks the built index.html for\n  inline code and absolute URLs\n- CI sets up Node from .nvmrc; CodeQL scans javascript-typescript;\n  dependabot gains an npm entry for /src/web\n- ruff, mypy, bandit, vulture, codespell, pyright and mutmut skip\n  src/web; the wheel check rejects app sources\n- ADR-0001 records the hybrid layout\n\nTest assertions changed: test_analyze_matrix_languages_exact gains\njavascript-typescript; test_task_dep_covers_full_check_set gains\nweb_install and web_build.\n\nAddresses #7\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01NXu1sbBxFsEQW16MiZv7Je\n\n* fix: allow only the licenses the repo admin approved\n\nThe license allowlist had Python-2.0 and Unlicense, which no package\nuses and nobody approved. Both are removed, and the tests now expect\nthe script to reject them. The doc lists the whole allowlist and says\nthat a new license is a decision for the repo admin, not an edit to\nthe list.\n\nAddresses #7\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01NXu1sbBxFsEQW16MiZv7Je\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-11-27T20:17:41Z",
+          "tree_id": "daca470a853de0c11fc142ba79e267ba0372334c",
+          "url": "https://github.com/endavis/bastproxy-webclient/commit/2fca3f37996f5367e16d20b2fca7dbe25013ebc5"
+        },
+        "date": 1795810695182,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "tests/benchmarks/test_bench_core.py::test_bench_greet_default",
+            "value": 7822831.834270848,
+            "unit": "iter/sec",
+            "range": "stddev: 1.2450357737302625e-8",
+            "extra": "mean: 127.83094679590646 nsec\nrounds: 83809"
+          },
+          {
+            "name": "tests/benchmarks/test_bench_core.py::test_bench_greet_with_name",
+            "value": 8469559.465025766,
+            "unit": "iter/sec",
+            "range": "stddev: 1.2606929877576013e-8",
+            "extra": "mean: 118.06989538587034 nsec\nrounds: 86126"
+          },
+          {
+            "name": "tests/benchmarks/test_bench_core.py::test_bench_greet_long_name",
+            "value": 5534551.720060632,
+            "unit": "iter/sec",
+            "range": "stddev: 1.4635054603077938e-8",
+            "extra": "mean: 180.6831068856729 nsec\nrounds: 56584"
+          },
+          {
+            "name": "tests/benchmarks/test_bench_logging.py::test_bench_get_logger",
+            "value": 2091665.1277666374,
+            "unit": "iter/sec",
+            "range": "stddev: 8.520631740083887e-8",
+            "extra": "mean: 478.08800114564417 nsec\nrounds: 196890"
+          },
+          {
+            "name": "tests/benchmarks/test_bench_logging.py::test_bench_setup_logging",
+            "value": 450738.91688245244,
+            "unit": "iter/sec",
+            "range": "stddev: 1.9804222917448186e-7",
+            "extra": "mean: 2.2185792318899957 usec\nrounds: 46817"
           }
         ]
       }
