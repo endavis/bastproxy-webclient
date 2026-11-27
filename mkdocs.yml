@@ -115,6 +115,7 @@ nav:
       - Extensions: development/extensions.md
       - Release & Automation: development/release-and-automation.md
       - Dependabot Auto-Merge: development/dependabot-automerge.md
+      - Web Client: development/web-client.md
       - AI:
           - First 5 Minutes: development/ai/first-5-minutes.md
           - Setup: development/AI_SETUP.md
@@ -144,6 +145,7 @@ nav:
       - Tools Reference: template/tools-reference.md
   - Decisions:
       - Overview: decisions/README.md
+      - ADR-0001 Keep the web app in src/web inside the Python template project: decisions/0001-keep-the-web-app-in-srcweb-inside-the-python-template-project.md
       - ADR-9001 uv: decisions/9001-use-uv-for-package-management.md
       - ADR-9002 doit: decisions/9002-use-doit-for-task-automation.md
       - ADR-9003 ruff: decisions/9003-use-ruff-for-linting-and-formatting.md

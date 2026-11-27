@@ -150,5 +150,4 @@ The Issue contains the full discussion; the ADR summarizes the outcome.
 
 | ADR | Title | Status |
 |-----|-------|--------|
-
-_(No project-level ADRs yet.)_
+| [0001](0001-keep-the-web-app-in-srcweb-inside-the-python-template-project.md) | Keep the web app in src/web inside the Python template project | Accepted |

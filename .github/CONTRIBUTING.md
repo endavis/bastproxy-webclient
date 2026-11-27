@@ -264,6 +264,12 @@ same change and needs the same approval.
 
 ### Where a Dependency Goes
 
+The web app under `src/web/` has its own manifest, `src/web/package.json`. Every npm package there
+is a `devDependency` (the app is built, not installed), pinned to an exact version, with
+`package-lock.json` committed. The same ask-first rule applies, and the license must be one the
+allowlist in `src/web/scripts/check-licenses.mjs` accepts (`doit web_licenses`). See
+[Web client](../docs/development/web-client.md).
+
 | `pyproject.toml` table | Holds | Command |
 | :--- | :--- | :--- |
 | `[project] dependencies` | What code under `src/` imports at runtime. It ships to every user of the package, so keep it minimal. | `uv add <package>` |

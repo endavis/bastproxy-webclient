@@ -79,6 +79,11 @@ tmp/*
 # Claude Code's built-in worktree tool (EnterWorktree) creates worktrees here.
 .claude/worktrees/
 
+# Web app (src/web/): npm packages and test output. `src/web/dist/` is covered by `dist/` above.
+# Do not ignore `lib/` for the web app: `src/web/src/lib/` would be hidden by the Python `lib/`.
+node_modules/
+src/web/coverage/
+
 # Documentation
 site/
 

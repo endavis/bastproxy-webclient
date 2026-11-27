@@ -64,6 +64,46 @@ updates:
           - "minor"
           - "patch"
 
+  - package-ecosystem: "npm"
+    directory: "/src/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "automated"
+    commit-message:
+      prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
+      include:
+        - "*"
+    groups:
+      # `vitest` and `@vitest/coverage-v8` must stay on one version: the coverage
+      # provider refuses to run against another vitest. Ungrouped, dependabot opens
+      # one PR per package and each fails alone, as with codeql-action (#799).
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      # Catch-all, last on purpose; see the uv ecosystem above and issue #1221.
+      minor-and-patch:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "crypt*"
+          - "*ssl*"
+          - "*security*"
+          - "auth*"
+          - "*jwt*"
+          - "*oauth*"
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

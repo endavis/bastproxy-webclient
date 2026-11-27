@@ -49,6 +49,7 @@ Key documentation files:
 ### Prerequisites
 
 - Python 3.12+
+- Node, at the version in `.nvmrc` (for the web app under `src/web/`; install with `nvm install`)
 - [uv](https://github.com/astral-sh/uv) - Fast Python package installer
 - [direnv](https://direnv.net/) - Automatic environment variable loading (optional but recommended)
 

@@ -14,8 +14,9 @@ def _make_tmp_dir() -> None:
 
 
 def task_audit() -> dict[str, Any]:
-    """Run security audit with pip-audit (requires security extras)."""
+    """Run security audit with pip-audit (requires security extras) and ``npm audit``."""
     return {
+        "task_dep": ["web_audit"],
         "actions": [
             install_check_or_skip(
                 "pip-audit",
@@ -47,8 +48,9 @@ def task_security() -> dict[str, Any]:
 
 
 def task_licenses() -> dict[str, Any]:
-    """Check licenses of dependencies (requires security extras)."""
+    """Check licenses of dependencies (requires security extras) and the npm allowlist."""
     return {
+        "task_dep": ["web_licenses"],
         "actions": [
             install_check_or_skip(
                 "pip-licenses",
@@ -62,8 +64,9 @@ def task_licenses() -> dict[str, Any]:
 
 
 def task_sbom() -> dict[str, Any]:
-    """Generate SBOM in CycloneDX format (requires security extras)."""
+    """Generate SBOM in CycloneDX format (requires security extras), Python and npm."""
     return {
+        "task_dep": ["web_sbom"],
         "actions": [
             _make_tmp_dir,
             install_check_or_skip(

@@ -150,15 +150,16 @@ class TestAnalyzeJob:
         assert "analyze" in workflow["jobs"]
 
     def test_analyze_matrix_languages_exact(self) -> None:
-        """Matrix languages must be exactly ``actions`` and ``python``.
+        """Matrix languages must be exactly ``actions``, ``python`` and ``javascript-typescript``.
 
-        Expanding the language set is out of scope for #431 and requires a
-        separate decision -- this test guards against accidental drift.
+        ``javascript-typescript`` joined with the web app under ``src/web/`` (#7).
+        Any other change to the language set requires a separate decision -- this
+        test guards against accidental drift.
         """
         workflow = _load_workflow()
         job = workflow["jobs"]["analyze"]
         matrix = job["strategy"]["matrix"]
-        assert sorted(matrix["language"]) == ["actions", "python"]
+        assert sorted(matrix["language"]) == ["actions", "javascript-typescript", "python"]
 
     def test_analyze_matrix_fail_fast_false(self) -> None:
         """fail-fast: false so one language failing doesn't mask the other."""

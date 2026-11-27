@@ -15,7 +15,7 @@ def task_test() -> dict[str, Any]:
     ``env_check`` runs first (#1033): see ``tools/doit/quality.py::task_check``.
     """
     return {
-        "task_dep": ["env_check"],
+        "task_dep": ["env_check", "web_test"],
         "actions": ["uv run pytest -n auto -q -rfE --tb=short"],
         "title": title_with_actions,
         "verbosity": 0,
