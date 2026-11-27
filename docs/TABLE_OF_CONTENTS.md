@@ -31,6 +31,7 @@ Complete index of all documentation, organized by audience and as a full alphabe
 ### For Contributors
 <!-- BEGIN:audience=contributors -->
 - [Add a Feature: End-to-End Walkthrough](examples/add-a-feature.md) - Step-by-step example of adding a module, CLI subcommand, tests, and docs to the project
+- [ADR-0001: Keep the web app in src/web inside the Python template project](decisions/0001-keep-the-web-app-in-srcweb-inside-the-python-template-project.md) - The Svelte web app lives in src/web/ inside the Python template project, with one check per Python check and a CSP check on its build.
 - [ADR-9001: Use uv for package management](decisions/9001-use-uv-for-package-management.md) - Use uv for dependency management, virtual environments and package installation
 - [ADR-9002: Use doit for task automation](decisions/9002-use-doit-for-task-automation.md) - Use doit as the task runner for testing, linting, building and other routine operations
 - [ADR-9003: Use ruff for linting and formatting](decisions/9003-use-ruff-for-linting-and-formatting.md) - Use ruff as the one tool for linting and formatting, in place of flake8, black and isort
@@ -94,6 +95,7 @@ Complete index of all documentation, organized by audience and as a full alphabe
 - [Slash Commands and Workflows](development/ai/slash-commands.md) - Reference for the slash commands and dual-agent workflow this project ships with
 - [Template Tools Reference](template/tools-reference.md) - Complete reference for all template tools in tools/pyproject_template/
 - [Tooling Roles and Architectural Boundaries](development/tooling-roles.md) - What each tool is for, who uses it, and where runtime code ends and dev tooling begins
+- [Web client](development/web-client.md) - The Svelte web app under src/web/, its checks, its doit tasks and the CSP its build must fit
 <!-- END:audience=contributors -->
 
 ### For AI Agents
@@ -119,6 +121,7 @@ Complete index of all documentation, organized by audience and as a full alphabe
 ## Complete Index
 <!-- BEGIN:all -->
 - [Add a Feature: End-to-End Walkthrough](examples/add-a-feature.md) - Step-by-step example of adding a module, CLI subcommand, tests, and docs to the project
+- [ADR-0001: Keep the web app in src/web inside the Python template project](decisions/0001-keep-the-web-app-in-srcweb-inside-the-python-template-project.md) - The Svelte web app lives in src/web/ inside the Python template project, with one check per Python check and a CSP check on its build.
 - [ADR-9001: Use uv for package management](decisions/9001-use-uv-for-package-management.md) - Use uv for dependency management, virtual environments and package installation
 - [ADR-9002: Use doit for task automation](decisions/9002-use-doit-for-task-automation.md) - Use doit as the task runner for testing, linting, building and other routine operations
 - [ADR-9003: Use ruff for linting and formatting](decisions/9003-use-ruff-for-linting-and-formatting.md) - Use ruff as the one tool for linting and formatting, in place of flake8, black and isort
@@ -191,6 +194,7 @@ Complete index of all documentation, organized by audience and as a full alphabe
 - [Tooling Roles and Architectural Boundaries](development/tooling-roles.md) - What each tool is for, who uses it, and where runtime code ends and dev tooling begins
 - [Usage Guide](usage/basics.md) - Package usage and development workflows
 - [Using This Template](template/index.md) - Overview of using pyproject-template for your Python projects
+- [Web client](development/web-client.md) - The Svelte web app under src/web/, its checks, its doit tasks and the CSP its build must fit
 <!-- END:all -->
 
 ---

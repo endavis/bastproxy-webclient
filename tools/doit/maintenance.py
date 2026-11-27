@@ -53,6 +53,7 @@ def task_cleanup() -> dict[str, Any]:
         dirs = [
             "build",
             "dist",
+            "src/web/dist",
             ".eggs",
             "__pycache__",
             ".pytest_cache",

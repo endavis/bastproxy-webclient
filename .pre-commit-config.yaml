@@ -108,7 +108,8 @@ repos:
         entry: uv run codespell
         language: system
         types: [text]
-        exclude: ^(\.git/|\.venv/|uv\.lock)
+        # The web app's lockfile holds integrity hashes, which codespell reads as misspellings.
+        exclude: ^(\.git/|\.venv/|uv\.lock|src/web/package-lock\.json)
         stages: [pre-commit]
 
       # Branch naming enforcement

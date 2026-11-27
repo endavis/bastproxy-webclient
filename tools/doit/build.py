@@ -127,6 +127,28 @@ def _missing_py_typed(wheel_path: Path, import_name: str) -> str | None:
     return None if expected in names else expected
 
 
+def _unexpected_app_members(wheel_path: Path, import_name: str) -> list[str]:
+    """Return the wheel members that belong to the web app instead of the package.
+
+    The wheel carries only ``<import_name>/`` and its ``*.dist-info/``. The web app under
+    ``src/web/`` is built and served separately, so its sources, ``node_modules`` and
+    ``package.json`` must not ship in the wheel. Returns the offending member names, sorted.
+    """
+    with zipfile.ZipFile(wheel_path) as zf:
+        names = zf.namelist()
+    allowed_roots = (f"{import_name}/",)
+    app_suffixes = (".svelte", ".ts", ".tsx")
+    unexpected = [
+        name
+        for name in names
+        if "node_modules/" in name
+        or name.endswith(app_suffixes)
+        or name.rsplit("/", 1)[-1] in {"package.json", "package-lock.json"}
+        or not (name.startswith(allowed_roots) or name.split("/", 1)[0].endswith(".dist-info"))
+    ]
+    return sorted(unexpected)
+
+
 def _venv_python(venv_dir: Path) -> Path:
     """Return the venv's ``python`` executable, Windows-aware (``Scripts/python.exe``)."""
     if platform.system() == "Windows":
@@ -239,6 +261,13 @@ def _check_wheel(dist: str) -> list[str]:
         if missing is not None:
             failures.append(
                 f"py.typed missing from wheel: expected {missing!r} in {wheel_path.name}"
+            )
+
+        unexpected = _unexpected_app_members(wheel_path, import_name)
+        if unexpected:
+            failures.append(
+                f"{wheel_path.name} holds web app files that must not ship: "
+                + ", ".join(unexpected[:10])
             )
 
         venv_dir = tmp_dir / "venv"

@@ -201,6 +201,8 @@ class TestTaskCheck:
             "deadcode",
             "security",
             "audit",
+            "web_install",
+            "web_build",
             "spell_check",
             "wheel_check",
             "docs_build",

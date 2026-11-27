@@ -156,7 +156,7 @@ def _ecosystem_block(ecosystem: str) -> dict[str, Any]:
 class TestCatchAllGroup:
     """The minor/patch catch-all group that batches weekly updates (issue #1221)."""
 
-    ECOSYSTEMS = ("uv", "github-actions")
+    ECOSYSTEMS = ("uv", "npm", "github-actions")
 
     def test_each_ecosystem_has_catch_all(self) -> None:
         """Each ecosystem batches minor and patch bumps into one group."""
@@ -171,6 +171,7 @@ class TestCatchAllGroup:
     SENSITIVE_PARITY_GROUPS = (
         ("uv", "dev-dependencies"),
         ("uv", CATCH_ALL_GROUP),
+        ("npm", CATCH_ALL_GROUP),
         ("github-actions", CATCH_ALL_GROUP),
     )
 
@@ -205,6 +206,31 @@ class TestCatchAllGroup:
         """``dev-dependencies`` keeps its members ahead of the catch-all."""
         names = list(_ecosystem_block("uv")["groups"])
         assert names.index("dev-dependencies") < names.index(CATCH_ALL_GROUP)
+
+
+class TestNpmEcosystem:
+    """The web app's npm dependencies are updated from ``/src/web`` (issue #7)."""
+
+    def test_npm_block_points_at_the_web_app(self) -> None:
+        assert _ecosystem_block("npm")["directory"] == "/src/web"
+
+    def test_vitest_and_its_coverage_provider_share_a_group(self) -> None:
+        """``@vitest/coverage-v8`` fails against another vitest version, so they bump together."""
+        groups: dict[str, Any] = _ecosystem_block("npm")["groups"]
+        matching = [
+            name
+            for name, spec in groups.items()
+            if name != CATCH_ALL_GROUP
+            and all(
+                any(_glob_matches(pattern, dep) for pattern in spec["patterns"])
+                for dep in ("vitest", "@vitest/coverage-v8")
+            )
+        ]
+        assert matching == ["vitest"]
+
+    def test_vitest_group_precedes_catch_all(self) -> None:
+        names = list(_ecosystem_block("npm")["groups"])
+        assert names.index("vitest") < names.index(CATCH_ALL_GROUP)
 
 
 class TestSemverUnclassifiableUpdates:

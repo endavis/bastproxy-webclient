@@ -227,6 +227,12 @@ jobs:
         with:
           python-version: ${{ needs.setup.outputs.newest }}
 
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+
       - id: setup-uv
         uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
@@ -256,6 +262,13 @@ jobs:
           want = os.environ["UV_PYTHON"];
           print("uv runs Python " + v + ", requested " + want);
           sys.exit(0 if v == want else 1)'
+
+      # The node-gated tests in tests/test_web_tasks.py run only when src/web/node_modules exists.
+      - name: Install web dependencies
+        run: uv run doit web_install
+
+      - name: Run web tests
+        run: uv run doit web_test
 
       # --durations stay on (#1321): -v lists every test, so the table adds only the tests
       # over 0.05s, and a later slowdown shows in the log.
@@ -361,6 +374,12 @@ jobs:
         with:
           python-version: ${{ needs.setup.outputs.newest }}
 
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+
       - id: setup-uv
         uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
@@ -429,6 +448,15 @@ jobs:
       - name: Check the built wheel
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: uv run doit wheel_check
+
+      - name: Install web dependencies
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit web_install
+
+      # Builds the web app and checks the output against the proxy's CSP.
+      - name: Build the web app
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit web_build
 
   ci-complete:
     if: always()

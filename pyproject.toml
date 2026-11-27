@@ -83,7 +83,10 @@ version-file = "src/bastproxy_webclient/_version.py"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["**/_version.py"]
+# `src/web/` is the Svelte web app: its npm packages ship Python files (node-gyp) that ruff
+# would otherwise lint. force-exclude applies the same list to files passed on the command line.
+extend-exclude = ["**/_version.py", "src/web"]
+force-exclude = true
 
 [tool.ruff.lint]
 # Enable preview mode but require rules to be listed by exact code so we
@@ -135,7 +138,7 @@ no_implicit_optional = true
 strict_equality = true
 warn_redundant_casts = true
 warn_unreachable = true
-exclude = [".claude/", ".codex/"]
+exclude = [".claude/", ".codex/", "src/web/"]
 
 [[tool.mypy.overrides]]
 module = "doit.*"
@@ -241,6 +244,7 @@ exclude_dirs = [
     ".codex/*",
     ".devcontainer/*",
     ".vscode/*",
+    "src/web/*",
 ]
 skips = [
     "B101",
@@ -249,7 +253,7 @@ skips = [
 ]
 
 [tool.codespell]
-skip = "tmp,.venv,.git,*.lock,*.pyc,__pycache__"
+skip = "tmp,.venv,.git,*.lock,*.pyc,__pycache__,node_modules,package-lock.json,dist"
 ignore-words-list = "crate"
 
 [tool.vulture]
@@ -258,6 +262,7 @@ paths = ["src", "tests", "tools"]
 exclude = [
     "*/tests/*",      # Test fixtures often appear unused
     "*/__pycache__/*",
+    "*/src/web/*",    # The Svelte web app and its npm packages
 ]
 # Common false positives in Python projects
 ignore_names = [
@@ -283,7 +288,9 @@ ignore_decorators = [
 ]
 
 [tool.mutmut]
-source_paths = ["src/"]
+# The package only: `src/web/` is the Svelte web app, which mutmut cannot mutate and whose npm
+# packages would be copied into mutants/ (#7).
+source_paths = ["src/bastproxy_webclient/"]
 # The tests that exercise src/, not all of tests/. mutmut runs them inside
 # mutants/, a copy holding src/, tests/ and the project files but not tools/ or
 # the rest of the repository. One test there that imports tools or reads a repo
@@ -337,6 +344,7 @@ exclude = [
     "**/.ruff_cache",
     "**/site",        # mkdocs build output
     "**/.git",
+    "src/web",        # The Svelte web app and its npm packages
 ]
 venvPath = "."
 venv = ".venv"

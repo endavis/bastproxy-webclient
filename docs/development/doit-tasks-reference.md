@@ -258,6 +258,7 @@ doit check
 **What it does:**
 - Warns, without failing, if the environment has drifted from `uv.lock` (#1033)
 - Runs format check, lint, type check, security, spelling, a wheel smoke test, a strict docs build, and tests
+- Installs and builds the web app, and checks the build against the proxy's CSP; the web app's format, lint, type, dead-code, audit and test checks run inside the matching Python task (see [Web client](web-client.md))
 - Stops on first failure
 
 **Task dependencies:**
@@ -270,6 +271,8 @@ doit check
 - `wheel_check`
 - `docs_build`
 - `test`
+- `web_install`
+- `web_build`
 
 ### `env_check`
 
@@ -439,7 +442,7 @@ doit security
 
 ### `audit`
 
-Run dependency vulnerability audit with pip-audit.
+Run dependency vulnerability audit with pip-audit and `npm audit` (`web_audit`).
 
 ```bash
 doit audit
@@ -447,6 +450,7 @@ doit audit
 
 **What it does:**
 - Scans all dependencies for known CVE vulnerabilities
+- Runs `web_audit`, which fails on a moderate, high or critical npm advisory
 - Reports any security advisories
 
 **Requires:** the `security` extra, which `doit install_dev` installs
@@ -462,6 +466,7 @@ doit licenses
 **What it does:**
 - Lists all dependency licenses for compliance review
 - Outputs in markdown table format
+- Runs `web_licenses`, which fails on an npm package whose license is not in the allowlist in `src/web/scripts/check-licenses.mjs`
 
 **Requires:** the `security` extra, which `doit install_dev` installs
 
@@ -476,6 +481,7 @@ doit sbom
 **What it does:**
 - Generates SBOM files from the project's dependency tree
 - Produces both JSON and XML formats
+- Runs `web_sbom`, which writes the web app's SBOM to `tmp/sbom-web.json`
 
 **Output locations:**
 - `tmp/sbom.json` -- CycloneDX JSON format
@@ -489,6 +495,29 @@ doit sbom
 - Before releases (SBOMs are also auto-generated in CI release workflows)
 
 See [SBOM Generation](release-and-automation.md#sbom-generation) for details on usage and CI integration.
+
+---
+
+## Web Tasks
+
+The Svelte web app under `src/web/` has one task per check. Each wraps an npm script in
+`src/web/package.json` and depends on `web_install`. See [Web client](web-client.md).
+
+| Task | npm script | Python counterpart |
+| :--- | :--- | :--- |
+| `web_install` | `npm ci` (cached on `package.json` and `package-lock.json`) | `uv sync` |
+| `web_lint` | `lint` (ESLint) | `lint` |
+| `web_format` | `format` (Prettier) | `format` |
+| `web_format_check` | `format:check` | `format_check` |
+| `web_typecheck` | `typecheck` (tsc, svelte-check) | `type_check` |
+| `web_test` | `test` (Vitest, 90% coverage threshold) | `test` |
+| `web_deadcode` | `deadcode` (knip) | `deadcode` |
+| `web_audit` | `npm audit --audit-level=moderate` | `audit` |
+| `web_licenses` | `licenses` (allowlist) | `licenses` |
+| `web_sbom` | `sbom` (CycloneDX) | `sbom` |
+| `web_build` | `build` (Vite), then a check of the output against the CSP | `wheel_check` |
+
+`web_install` fails, naming `.nvmrc`, when `npm` is missing.
 
 ---
 
