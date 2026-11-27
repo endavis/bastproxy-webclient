@@ -1,0 +1,96 @@
+name: Daily Check
+
+on:
+  schedule:
+    - cron: "17 6 * * *"  # Daily at 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: daily-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: pv
+        uses: ./.github/actions/python-versions
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ steps.pv.outputs.newest }}
+
+      - name: Point uv at the installed Python
+        env:
+          PYTHON_VERSION: ${{ steps.pv.outputs.newest }}
+        run: echo "UV_PYTHON=${PYTHON_VERSION}" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      # Fails the job when uv runs another Python than the one requested
+      # above (#1261). Assumes the requested version is in X.Y form.
+      - name: Check the Python version
+        shell: bash
+        run: >-
+          uv run python -c 'import os, sys;
+          v = "%d.%d" % sys.version_info[:2];
+          want = os.environ["UV_PYTHON"];
+          print("uv runs Python " + v + ", requested " + want);
+          sys.exit(0 if v == want else 1)'
+
+      # --continue runs every task after a failure, so a second failure is not
+      # hidden behind the first. The log feeds the failing-task list below (#952).
+      - name: Run doit check
+        run: |
+          set -o pipefail
+          uv run doit --continue check 2>&1 | tee "${RUNNER_TEMP}/doit-check.log"
+
+      - name: Open or update failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          today="$(date -u +%Y-%m-%d)"
+          # doit prints "TaskFailed - taskid:<name>" for a failing command and
+          # "TaskError - taskid:<name>" for a Python action that raised.
+          failed="$(grep -oE '^(TaskFailed|TaskError) - taskid:[^ ]+' \
+            "${RUNNER_TEMP}/doit-check.log" 2>/dev/null \
+            | sed 's/.*taskid://' | awk '!seen[$0]++' \
+            | sed 's/.*/`&`/' | paste -sd, - | sed 's/,/, /g')" || true
+          failed="${failed:-none identified, see the run log}"
+          existing="$(gh issue list --state open --label automated --json number,title \
+            --jq '[.[] | select(.title | contains("Daily doit check failed"))][0].number // empty')"
+          {
+            echo "Scheduled \`doit check\` failed on \`main\`."
+            echo
+            echo "- Run: ${RUN_URL}"
+            echo "- Seen: ${today} (UTC)"
+            echo "- Failing tasks: ${failed}"
+            echo
+            echo "Runs \`uv run doit --continue check\`, which runs every task \`doit check\` depends on"
+            echo "and reports each one that fails. Close this issue once the check passes again."
+          } > "${RUNNER_TEMP}/issue-body.md"
+          if [ -n "${existing}" ]; then
+            gh issue comment "${existing}" \
+              --body "Still failing as of ${today} (UTC). Failing tasks: ${failed}. Run: ${RUN_URL}"
+          else
+            gh issue create --title "🚨 Daily doit check failed on main" \
+              --label automated --label needs-triage \
+              --assignee "${OWNER}" \
+              --body-file "${RUNNER_TEMP}/issue-body.md"
+          fi

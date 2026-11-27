@@ -1,0 +1,100 @@
+name: Publish to TestPyPI
+
+on:
+  workflow_dispatch:
+  # PEP440 pre-release tag patterns. commitizen (used by doit release) emits
+  # these forms, not semver-style v*-alpha.* tags. See #659.
+  push:
+    tags:
+      - "v*a[0-9]*"       # alpha: v0.1.0a0
+      - "v*b[0-9]*"       # beta: v0.1.0b1
+      - "v*rc[0-9]*"      # rc: v0.1.0rc0
+      - "v*.dev[0-9]*"    # dev: v0.1.0.dev2
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    name: Run CI checks
+    uses: ./.github/workflows/ci.yml
+    with:
+      all_os: true
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - id: pv
+        uses: ./.github/actions/python-versions
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ steps.pv.outputs.newest }}
+
+      - name: Point uv at the installed Python
+        env:
+          PYTHON_VERSION: ${{ steps.pv.outputs.newest }}
+        run: echo "UV_PYTHON=${PYTHON_VERSION}" >> "$GITHUB_ENV"
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      # Fails the job when uv runs another Python than the one requested
+      # above (#1261). Assumes the requested version is in X.Y form.
+      - name: Check the Python version
+        shell: bash
+        run: >-
+          uv run python -c 'import os, sys;
+          v = "%d.%d" % sys.version_info[:2];
+          want = os.environ["UV_PYTHON"];
+          print("uv runs Python " + v + ", requested " + want);
+          sys.exit(0 if v == want else 1)'
+
+      - name: Show resolved version
+        run: |
+          uv run python - <<'PY'
+          import package_name
+          print(f"Resolved version: {package_name.__version__}")
+          PY
+
+      - name: Build artifacts
+        run: uv build
+
+      - name: Check the built wheel
+        run: uv run doit wheel_check --dist=dist
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist
+          skip-existing: true

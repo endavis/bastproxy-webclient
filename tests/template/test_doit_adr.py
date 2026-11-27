@@ -1,0 +1,806 @@
+"""Tests for adr.py doit tasks."""
+
+import re
+from datetime import date
+from io import StringIO
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
+from rich.console import Console
+
+from tools.doit import adr as adr_module
+from tools.doit.adr import (
+    TEMPLATE_SERIES_FLOOR,
+    _get_next_adr_number,
+    _is_placeholder_content,
+    _open_editor_with_template,
+    _read_body_file,
+    _title_to_slug,
+    _validate_adr_content,
+)
+from tools.doit.templates import FRONTMATTER_PATTERN, get_adr_template
+
+# FORCE_COLOR makes Rich color captured output, and the codes split substrings such as `[x]`.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+class TestTitleToSlug:
+    """Tests for _title_to_slug function."""
+
+    def test_simple_title(self) -> None:
+        """Test conversion of simple title."""
+        assert _title_to_slug("Use uv for package management") == "use-uv-for-package-management"
+
+    def test_title_with_special_chars(self) -> None:
+        """Test removal of special characters."""
+        assert _title_to_slug("Use ruff (linting & formatting)") == "use-ruff-linting-formatting"
+
+    def test_title_with_multiple_spaces(self) -> None:
+        """Test collapsing of multiple spaces."""
+        assert _title_to_slug("Use  doit   for   automation") == "use-doit-for-automation"
+
+    def test_title_with_underscores(self) -> None:
+        """Test conversion of underscores to hyphens."""
+        assert _title_to_slug("use_redis_for_caching") == "use-redis-for-caching"
+
+    def test_title_with_mixed_case(self) -> None:
+        """Test conversion to lowercase."""
+        assert _title_to_slug("Use PostgreSQL Database") == "use-postgresql-database"
+
+    def test_title_with_numbers(self) -> None:
+        """Test preservation of numbers."""
+        assert _title_to_slug("Python 3.12 compatibility") == "python-312-compatibility"
+
+    def test_title_with_leading_trailing_special(self) -> None:
+        """Test trimming of leading/trailing special characters."""
+        assert _title_to_slug("  --Use Redis--  ") == "use-redis"
+
+    def test_empty_title(self) -> None:
+        """Test handling of empty title."""
+        assert _title_to_slug("") == ""
+
+    def test_title_with_only_special_chars(self) -> None:
+        """Test handling of title with only special characters."""
+        assert _title_to_slug("!@#$%") == ""
+
+
+class TestGetNextAdrNumber:
+    """Tests for _get_next_adr_number function."""
+
+    def test_returns_positive_integer(self) -> None:
+        """Smoke test against the real ADR_DIR: returns a positive integer."""
+        result = _get_next_adr_number()
+        assert isinstance(result, int)
+        assert result >= 1
+
+    def test_project_series_returns_1_when_no_project_adrs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Project series starts at 1 when only template (9XXX) ADRs exist."""
+        for n in range(9001, 9016):
+            (tmp_path / f"{n}-example.md").write_text(f"# ADR-{n}", encoding="utf-8")
+
+        monkeypatch.setattr(adr_module, "ADR_DIR", tmp_path)
+        assert _get_next_adr_number(template=False) == 1
+
+    def test_template_series_returns_9016_given_9015_max(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Template series returns max + 1 when template ADRs already exist."""
+        for n in range(9001, 9016):
+            (tmp_path / f"{n}-example.md").write_text(f"# ADR-{n}", encoding="utf-8")
+
+        monkeypatch.setattr(adr_module, "ADR_DIR", tmp_path)
+        assert _get_next_adr_number(template=True) == 9016
+
+    def test_template_series_returns_floor_when_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Template series returns the floor (9001) when no template ADRs exist."""
+        # Project ADRs present, but no template ADRs.
+        (tmp_path / "0001-something.md").write_text("# ADR-0001", encoding="utf-8")
+
+        monkeypatch.setattr(adr_module, "ADR_DIR", tmp_path)
+        assert _get_next_adr_number(template=True) == TEMPLATE_SERIES_FLOOR
+
+    def test_project_series_returns_max_plus_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Project series returns max + 1 when project ADRs already exist."""
+        (tmp_path / "0001-first.md").write_text("# ADR-0001", encoding="utf-8")
+        (tmp_path / "0002-second.md").write_text("# ADR-0002", encoding="utf-8")
+
+        monkeypatch.setattr(adr_module, "ADR_DIR", tmp_path)
+        assert _get_next_adr_number(template=False) == 3
+
+    def test_series_isolation(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Template and project series are counted independently in the shared directory."""
+        (tmp_path / "0001-first.md").write_text("# ADR-0001", encoding="utf-8")
+        (tmp_path / "0002-second.md").write_text("# ADR-0002", encoding="utf-8")
+        (tmp_path / "9001-a.md").write_text("# ADR-9001", encoding="utf-8")
+        (tmp_path / "9015-b.md").write_text("# ADR-9015", encoding="utf-8")
+
+        monkeypatch.setattr(adr_module, "ADR_DIR", tmp_path)
+        assert _get_next_adr_number(template=False) == 3
+        assert _get_next_adr_number(template=True) == 9016
+
+    def test_readme_and_template_files_ignored(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """README.md and adr-template.md must not influence numbering."""
+        (tmp_path / "README.md").write_text("# README", encoding="utf-8")
+        (tmp_path / "adr-template.md").write_text("# ADR-NNNN", encoding="utf-8")
+
+        monkeypatch.setattr(adr_module, "ADR_DIR", tmp_path)
+        assert _get_next_adr_number(template=False) == 1
+        assert _get_next_adr_number(template=True) == TEMPLATE_SERIES_FLOOR
+
+    def test_missing_directory_returns_floor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If ADR_DIR does not exist, both series return their floor."""
+        missing = tmp_path / "does_not_exist"
+        monkeypatch.setattr(adr_module, "ADR_DIR", missing)
+
+        assert _get_next_adr_number(template=False) == 1
+        assert _get_next_adr_number(template=True) == TEMPLATE_SERIES_FLOOR
+
+
+class TestIsPlaceholderContent:
+    """Tests for _is_placeholder_content function."""
+
+    def test_placeholder_brief_summary(self) -> None:
+        """Test detection of 'Brief summary' placeholder."""
+        assert _is_placeholder_content("Brief summary of what was decided.") is True
+
+    def test_placeholder_why_decision(self) -> None:
+        """Test detection of 'Why this decision' placeholder."""
+        assert _is_placeholder_content("Why this decision was made.") is True
+
+    def test_placeholder_issue_xx(self) -> None:
+        """Test detection of 'Issue #XX' placeholder."""
+        assert _is_placeholder_content("Issue #XX: Description") is True
+
+    def test_real_content(self) -> None:
+        """Test that real content is not detected as placeholder."""
+        assert _is_placeholder_content("Use Redis for caching to improve performance.") is False
+
+    def test_real_issue_reference(self) -> None:
+        """Test that real issue references are not detected as placeholder."""
+        assert _is_placeholder_content("Issue #123: Add caching support") is False
+
+
+class TestValidateAdrContent:
+    """Tests for _validate_adr_content function."""
+
+    def _mock_console(self) -> MagicMock:
+        """Create a mock console for testing."""
+        console = MagicMock()
+        console.file = StringIO()
+        return console
+
+    @patch("tools.doit.adr.get_adr_required_sections")
+    def test_valid_content(self, mock_get_sections: MagicMock) -> None:
+        """Test validation of valid ADR content."""
+        mock_get_sections.return_value = ["Status", "Decision", "Rationale"]
+        content = """# ADR-0001: Test
+
+## Status
+
+Accepted
+
+## Decision
+
+Use Redis for caching.
+
+## Rationale
+
+Improves performance significantly.
+
+## Related Issues
+
+- Issue #42: Add caching
+"""
+        console = self._mock_console()
+        assert _validate_adr_content(content, console) is True
+
+    @patch("tools.doit.adr.get_adr_required_sections")
+    def test_missing_decision_section(self, mock_get_sections: MagicMock) -> None:
+        """Test validation fails when Decision section is missing."""
+        mock_get_sections.return_value = ["Status", "Decision", "Rationale"]
+        content = """# ADR-0001: Test
+
+## Status
+
+Accepted
+
+## Rationale
+
+Some rationale.
+"""
+        console = self._mock_console()
+        assert _validate_adr_content(content, console) is False
+
+    @patch("tools.doit.adr.get_adr_required_sections")
+    def test_missing_rationale_section(self, mock_get_sections: MagicMock) -> None:
+        """Test validation fails when Rationale section is missing."""
+        mock_get_sections.return_value = ["Status", "Decision", "Rationale"]
+        content = """# ADR-0001: Test
+
+## Status
+
+Accepted
+
+## Decision
+
+Use Redis.
+"""
+        console = self._mock_console()
+        assert _validate_adr_content(content, console) is False
+
+    @patch("tools.doit.adr.get_adr_required_sections")
+    def test_empty_decision_section(self, mock_get_sections: MagicMock) -> None:
+        """Test validation fails when Decision section is empty."""
+        mock_get_sections.return_value = ["Status", "Decision", "Rationale"]
+        content = """# ADR-0001: Test
+
+## Status
+
+Accepted
+
+## Decision
+
+## Rationale
+
+Some rationale.
+"""
+        console = self._mock_console()
+        assert _validate_adr_content(content, console) is False
+
+    @patch("tools.doit.adr.get_adr_required_sections")
+    def test_placeholder_content_rejected(self, mock_get_sections: MagicMock) -> None:
+        """Test validation fails when section has placeholder content."""
+        mock_get_sections.return_value = ["Status", "Decision", "Rationale"]
+        content = """# ADR-0001: Test
+
+## Status
+
+Accepted
+
+## Decision
+
+Brief summary of what was decided.
+
+## Rationale
+
+Why this decision was made.
+"""
+        console = self._mock_console()
+        assert _validate_adr_content(content, console) is False
+
+    @patch("tools.doit.adr.get_adr_required_sections")
+    def test_uses_template_required_sections(self, mock_get_sections: MagicMock) -> None:
+        """Test that validation uses sections from template."""
+        # Only require Status and Decision
+        mock_get_sections.return_value = ["Status", "Decision"]
+        content = """# ADR-0001: Test
+
+## Status
+
+Accepted
+
+## Decision
+
+Use Redis.
+"""
+        console = self._mock_console()
+        assert _validate_adr_content(content, console) is True
+        mock_get_sections.assert_called_once()
+
+
+_VALID_BODY = (
+    "## Status\nAccepted\n\n"
+    "## Decision\nEnd every ADR with one newline.\n\n"
+    "## Rationale\nend-of-file-fixer rewrites any other ending.\n"
+)
+
+
+class TestCreatedAdrEnding:
+    """The ADR `doit adr` writes ends with exactly one newline (#859).
+
+    `end-of-file-fixer` rewrites a file that ends with more, which fails the
+    commit and makes the author stage and commit again.
+    """
+
+    @staticmethod
+    def _create(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **source: str) -> str:
+        """Run `doit adr --template` with *source* (body or body_file); return the ADR text."""
+        adr_dir = tmp_path / "decisions"
+        monkeypatch.setattr(adr_module, "ADR_DIR", adr_dir)
+        action = adr_module.task_adr()["actions"][0]
+        action(title="End with one newline", template=True, **source)
+        (adr,) = adr_dir.glob("9*.md")
+        return adr.read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("ending", ["", "\n", "\n\n\n"], ids=["none", "one", "several"])
+    def test_body_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ending: str) -> None:
+        """Editors save with a final newline, so the usual body file already has one."""
+        body_file = tmp_path / "body.md"
+        body_file.write_text(_VALID_BODY.rstrip("\n") + ending, encoding="utf-8")
+
+        text = self._create(tmp_path, monkeypatch, body_file=str(body_file))
+
+        assert text.endswith("Rationale\nend-of-file-fixer rewrites any other ending.\n")
+
+    def test_body_string_ending_in_a_newline(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        text = self._create(tmp_path, monkeypatch, body=_VALID_BODY + "\n")
+
+        assert text.endswith("any other ending.\n")
+        assert not text.endswith("\n\n")
+
+
+class TestCreatedAdrFrontmatter:
+    """The ADR `doit adr` writes starts with the template's frontmatter, filled in (#841).
+
+    `docs/TABLE_OF_CONTENTS.md` is generated from each document's frontmatter,
+    so an ADR without it is listed bare and reaches no audience section.
+    """
+
+    @staticmethod
+    def _create(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, title: str = "Use Redis", **source: str
+    ) -> str:
+        """Run `doit adr --template` with *source* (body or body_file); return the ADR text."""
+        adr_dir = tmp_path / "decisions"
+        monkeypatch.setattr(adr_module, "ADR_DIR", adr_dir)
+        action = adr_module.task_adr()["actions"][0]
+        action(title=title, template=True, **source)
+        (adr,) = adr_dir.glob("9*.md")
+        return adr.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _meta(text: str) -> dict[str, Any]:
+        """Parse the frontmatter *text* starts with."""
+        match = FRONTMATTER_PATTERN.match(text)
+        assert match, "the ADR does not start with a frontmatter block"
+        meta: dict[str, Any] = yaml.safe_load(match.group(1))
+        return meta
+
+    def test_body_gets_the_template_frontmatter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        text = self._create(tmp_path, monkeypatch, body=_VALID_BODY)
+        meta = self._meta(text)
+
+        assert meta["title"] == "ADR-9001: Use Redis"
+        assert isinstance(meta["date"], date)
+        assert meta["audience"] == ["contributors"]
+        assert meta["tags"] == ["adr"]
+        assert "\n# ADR-9001: Use Redis\n" in text
+
+    def test_title_with_quotes_and_backslashes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        title = 'Quote "this" and C:\\temp'
+
+        text = self._create(tmp_path, monkeypatch, title=title, body=_VALID_BODY)
+
+        assert self._meta(text)["title"] == f"ADR-9001: {title}"
+
+    def test_body_frontmatter_is_kept_and_titled(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = "---\ndescription: Cache sessions in Redis\ntags:\n  - adr\n---\n\n" + _VALID_BODY
+
+        text = self._create(tmp_path, monkeypatch, body=body)
+
+        assert self._meta(text) == {
+            "title": "ADR-9001: Use Redis",
+            "description": "Cache sessions in Redis",
+            "tags": ["adr"],
+        }
+        assert text.count("---\n") == 2
+
+    def test_body_frontmatter_title_is_corrected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = '---\ntitle: "ADR-0042: Old name"\ndescription: Cache\n---\n' + _VALID_BODY
+
+        text = self._create(tmp_path, monkeypatch, body=body)
+
+        assert self._meta(text)["title"] == "ADR-9001: Use Redis"
+
+    def test_warns_while_the_description_is_the_placeholder(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        text = self._create(tmp_path, monkeypatch, body=_VALID_BODY)
+
+        assert self._meta(text)["description"] == get_adr_template().placeholder_description
+        assert "Replace the placeholder description" in capsys.readouterr().out
+
+    def test_no_warning_once_the_description_is_written(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        body = "---\ndescription: Cache sessions in Redis\n---\n" + _VALID_BODY
+
+        self._create(tmp_path, monkeypatch, body=body)
+
+        assert "Replace the placeholder description" not in capsys.readouterr().out
+
+    def test_editor_instructions_stay_out_of_the_adr(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_subprocess: MagicMock
+    ) -> None:
+        """Left in, they sat above the frontmatter, so it no longer counted as frontmatter."""
+
+        def edit(cmd: list[str]) -> MagicMock:
+            path = Path(cmd[1])
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("One sentence that says what was decided.", "Cache in Redis")
+            text = text.replace("Brief summary of what was decided.", "Use Redis.")
+            text = text.replace("Why this decision was made.", "It is fast.")
+            path.write_text(text, encoding="utf-8")
+            return MagicMock(returncode=0)
+
+        monkeypatch.setenv("EDITOR", "stand-in-editor")
+        mock_subprocess.register({("stand-in-editor",): edit})
+
+        text = self._create(tmp_path, monkeypatch)
+
+        assert text.startswith("---\n")
+        assert "Lines starting with #" not in text
+        meta = self._meta(text)
+        assert meta["title"] == "ADR-9001: Use Redis"
+        assert meta["description"] == "Cache in Redis"
+        assert isinstance(meta["date"], date)
+
+
+class TestReadBodyFile:
+    """`doit adr --body-file` reads through its own `_read_body_file`."""
+
+    @pytest.mark.parametrize("name", ["[x].md", "[/x].md", r"C:\notes\[1].md", ":memo:.md"])
+    def test_missing_file_keeps_a_bracketed_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+    ) -> None:
+        """The path is the user's `--body-file` value, text rather than markup (#907).
+
+        Relative to tmp_path, so the only backslash before a `[` is the one a name spells out.
+        A Windows path keeps it, and `:memo:` stays text (#914).
+        """
+        monkeypatch.chdir(tmp_path)
+        # color_system=None: no ANSI codes, even when FORCE_COLOR is set.
+        console = Console(file=StringIO(), soft_wrap=True, color_system=None)
+
+        assert _read_body_file(name, console) is None
+        assert f"File not found: {name}" in console.file.getvalue()  # type: ignore[attr-defined]
+
+
+class TestOpenEditorWithTemplate:
+    """The ADR editor."""
+
+    @pytest.mark.parametrize(
+        "editor", ["/opt/[x]/vi", "/opt/[/x]/vi", r"C:\tools\[1]\vi.exe", "/opt/:memo:/vi"]
+    )
+    def test_prints_the_editor_verbatim(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], editor: str
+    ) -> None:
+        """`$EDITOR` is the user's text, not markup (#920). It fails here, so nothing is read."""
+        monkeypatch.setenv("COLUMNS", "1000")
+        with (
+            patch("tools.doit.adr._get_editor", return_value=editor),
+            patch("tools.doit.adr.subprocess.run", return_value=MagicMock(returncode=1)),
+        ):
+            assert _open_editor_with_template("body") is None
+
+        assert f"Opening {editor}..." in _ANSI.sub("", capsys.readouterr().out).splitlines()
+
+
+_README = """# Architecture Decision Records
+
+## Index
+
+### Template-meta ADRs (9XXX)
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [9001](9001-first.md) | First | Accepted |
+
+### Project-level ADRs (0001+)
+
+| ADR | Title | Status |
+|-----|-------|--------|
+
+_(No project-level ADRs yet.)_
+"""
+
+_MKDOCS = """site_name: Demo
+nav:
+  - Home: index.md
+  - Decisions:
+      - Overview: decisions/README.md
+      # keep this comment
+      - ADR-9001 First: decisions/9001-first.md
+  - Reference:
+      - API: reference/api.md
+"""
+
+
+class _RegisterBase:
+    """A repo-shaped tree under tmp_path, with ``ADR_DIR`` pointed at it (#1245)."""
+
+    @staticmethod
+    def _repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        adr_dir = tmp_path / "docs" / "decisions"
+        adr_dir.mkdir(parents=True)
+        (adr_dir / "README.md").write_text(_README, encoding="utf-8")
+        (adr_dir / "9001-first.md").write_text("# ADR-9001: First\n", encoding="utf-8")
+        (tmp_path / "mkdocs.yml").write_text(_MKDOCS, encoding="utf-8")
+        monkeypatch.setattr(adr_module, "ADR_DIR", adr_dir)
+        return adr_dir
+
+    @staticmethod
+    def _run(capsys: pytest.CaptureFixture[str], **kwargs: str | bool) -> str:
+        kwargs.setdefault("title", "Use Redis")
+        adr_module.task_adr()["actions"][0](**kwargs)
+        return _ANSI.sub("", capsys.readouterr().out)
+
+    @staticmethod
+    def _nav(tmp_path: Path) -> list[Any]:
+        data = yaml.safe_load((tmp_path / "mkdocs.yml").read_text(encoding="utf-8"))
+        (entry,) = (e for e in data["nav"] if isinstance(e, dict) and "Decisions" in e)
+        return list(entry["Decisions"])
+
+
+class TestBodyHeadingPlaceholder(_RegisterBase):
+    """A body's `# ADR-...` heading is replaced whatever follows `ADR-` (#1245)."""
+
+    @pytest.mark.parametrize(
+        "heading", ["# ADR-NNNN: Repro title", "# ADR-0042: Old"], ids=["placeholder", "old-number"]
+    )
+    @pytest.mark.parametrize("via", ["body", "body_file"])
+    def test_heading_is_numbered(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        heading: str,
+        via: str,
+    ) -> None:
+        adr_dir = self._repo(tmp_path, monkeypatch)
+        text = f"{heading}\n\n{_VALID_BODY}"
+        if via == "body":
+            self._run(capsys, template=True, body=text)
+        else:
+            f = tmp_path / "b.md"
+            f.write_text(text, encoding="utf-8")
+            self._run(capsys, template=True, body_file=str(f))
+
+        adr = (adr_dir / "9002-use-redis.md").read_text(encoding="utf-8")
+        assert "# ADR-9002: Use Redis\n" in adr
+        assert "ADR-NNNN" not in adr
+        assert "ADR-0042" not in adr
+
+    def test_backslash_title_is_kept(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        adr_dir = self._repo(tmp_path, monkeypatch)
+        self._run(
+            capsys, title=r"Use C:\temp", template=True, body=f"# ADR-NNNN: x\n\n{_VALID_BODY}"
+        )
+
+        (adr,) = adr_dir.glob("9002-*.md")
+        assert "# ADR-9002: Use C:\\temp\n" in adr.read_text(encoding="utf-8")
+
+
+class TestRegisterInIndexAndNav(_RegisterBase):
+    """`doit adr` adds the ADR to the README index and the mkdocs nav (#1245)."""
+
+    def test_template_adr(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        adr_dir = self._repo(tmp_path, monkeypatch)
+        self._run(capsys, template=True, body=_VALID_BODY.replace("Accepted", "Proposed"))
+
+        readme = (adr_dir / "README.md").read_text(encoding="utf-8")
+        assert (
+            "| [9001](9001-first.md) | First | Accepted |\n"
+            "| [9002](9002-use-redis.md) | Use Redis | Proposed |\n"
+        ) in readme
+        assert readme.endswith("_(No project-level ADRs yet.)_\n")
+        assert self._nav(tmp_path)[-1] == {"ADR-9002 Use Redis": "decisions/9002-use-redis.md"}
+
+    def test_project_adr_replaces_placeholder_and_sorts_in_nav(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        adr_dir = self._repo(tmp_path, monkeypatch)
+        self._run(capsys, body=_VALID_BODY)
+
+        readme = (adr_dir / "README.md").read_text(encoding="utf-8")
+        assert "No project-level ADRs yet" not in readme
+        assert readme.endswith(
+            "|-----|-------|--------|\n| [0001](0001-use-redis.md) | Use Redis | Accepted |\n"
+        )
+        assert "| [9001](9001-first.md) | First | Accepted |\n\n###" in readme
+        nav = self._nav(tmp_path)
+        assert [next(iter(e.values())) for e in nav] == [
+            "decisions/README.md",
+            "decisions/0001-use-redis.md",
+            "decisions/9001-first.md",
+        ]
+        mkdocs = (tmp_path / "mkdocs.yml").read_text(encoding="utf-8")
+        assert "# keep this comment" in mkdocs
+        data = yaml.safe_load(mkdocs)
+        assert [next(iter(e)) for e in data["nav"]] == ["Home", "Decisions", "Reference"]
+
+    def test_title_with_colon_is_quoted_and_pipe_escaped(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        adr_dir = self._repo(tmp_path, monkeypatch)
+        self._run(capsys, title="Use a | b: fast", template=True, body=_VALID_BODY)
+
+        assert "| Use a \\| b: fast |" in (adr_dir / "README.md").read_text(encoding="utf-8")
+        assert self._nav(tmp_path)[-1] == {
+            "ADR-9002 Use a | b: fast": "decisions/9002-use-a-b-fast.md"
+        }
+
+    def test_editor_mode_registers_too(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        adr_dir = self._repo(tmp_path, monkeypatch)
+        monkeypatch.setattr(adr_module, "_open_editor_with_template", lambda _t: _VALID_BODY)
+        self._run(capsys, template=True)
+
+        assert "9002-use-redis.md" in (adr_dir / "README.md").read_text(encoding="utf-8")
+        assert "9002-use-redis.md" in (tmp_path / "mkdocs.yml").read_text(encoding="utf-8")
+
+    def test_existing_entries_are_not_duplicated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adr_dir = self._repo(tmp_path, monkeypatch)
+        readme, mkdocs = adr_dir / "README.md", tmp_path / "mkdocs.yml"
+        for _ in range(2):
+            assert adr_module._add_to_index(
+                readme, 9001, "First", "9001-first.md", "Accepted", True
+            )
+            assert adr_module._add_to_nav(mkdocs, 9001, "First", "decisions/9001-first.md")
+
+        assert readme.read_text(encoding="utf-8") == _README
+        assert mkdocs.read_text(encoding="utf-8") == _MKDOCS
+
+
+class TestRegisterFallbacks(_RegisterBase):
+    """An unplaceable entry leaves its file untouched and gets a reminder (#1245)."""
+
+    def test_both_files_missing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        adr_dir = tmp_path / "docs" / "decisions"
+        monkeypatch.setattr(adr_module, "ADR_DIR", adr_dir)
+        out = "".join(self._run(capsys, template=True, body=_VALID_BODY).split())
+
+        # Rich folds a long path across lines, so compare with the whitespace removed.
+        assert f"CouldnotupdatetheADRindex{adr_dir / 'README.md'}" in out
+        assert f"Couldnotupdatethenavin{tmp_path / 'mkdocs.yml'}" in out
+        assert (adr_dir / "9001-use-redis.md").exists()
+
+    def test_missing_series_table_and_decisions_nav(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        adr_dir = self._repo(tmp_path, monkeypatch)
+        readme, mkdocs = adr_dir / "README.md", tmp_path / "mkdocs.yml"
+        readme.write_text("# ADRs\n\n## Index\n\nNothing here.\n", encoding="utf-8")
+        mkdocs.write_text("site_name: Demo\nnav:\n  - Home: index.md\n", encoding="utf-8")
+        before = (readme.read_bytes(), mkdocs.read_bytes())
+
+        out = "".join(self._run(capsys, template=True, body=_VALID_BODY).split())
+
+        assert (readme.read_bytes(), mkdocs.read_bytes()) == before
+        assert "CouldnotupdatetheADRindex" in out
+        assert "Couldnotupdatethenavin" in out
+
+
+_MKDOCS_NESTED = """site_name: Demo
+nav:
+  - Home: index.md
+  - Decisions:
+      - Overview: decisions/README.md
+      - ADR-0001 Mine: decisions/0001-mine.md
+      - Template Decisions:
+          - ADR-9001 First: decisions/9001-first.md
+  - Reference:
+      - API: reference/api.md
+"""
+
+
+class TestNavNestedGroup:
+    """``_add_to_nav`` places entries by number around a nested group (#1259)."""
+
+    @staticmethod
+    def _add(tmp_path: Path, text: str, number: int) -> tuple[str, list[Any]]:
+        mkdocs = tmp_path / "mkdocs.yml"
+        mkdocs.write_text(text, encoding="utf-8")
+        path = f"decisions/{number:04d}-new.md"
+        assert adr_module._add_to_nav(mkdocs, number, "New", path)
+        out = mkdocs.read_text(encoding="utf-8")
+        data = yaml.safe_load(out)
+        (dec,) = (e for e in data["nav"] if isinstance(e, dict) and "Decisions" in e)
+        return out, list(dec["Decisions"])
+
+    def test_project_adr_goes_before_group(self, tmp_path: Path) -> None:
+        out, decisions = self._add(tmp_path, _MKDOCS_NESTED, 2)
+        lines = out.split("\n")
+        new = lines.index("      - ADR-0002 New: decisions/0002-new.md")
+        assert lines[new - 1].strip().startswith("- ADR-0001")
+        assert lines[new + 1].strip() == "- Template Decisions:"
+        group = next(d for d in decisions if isinstance(d, dict) and "Template Decisions" in d)
+        assert group["Template Decisions"] == [{"ADR-9001 First": "decisions/9001-first.md"}]
+
+    def test_template_adr_goes_inside_group(self, tmp_path: Path) -> None:
+        out, _ = self._add(tmp_path, _MKDOCS_NESTED, 9002)
+        lines = out.split("\n")
+        new = lines.index("          - ADR-9002 New: decisions/9002-new.md")
+        assert lines[new - 1].strip().startswith("- ADR-9001")
+
+    def test_template_adr_lands_between_neighbours(self, tmp_path: Path) -> None:
+        text = _MKDOCS_NESTED.replace(
+            "9001-first.md\n",
+            "9001-first.md\n          - ADR-9003 Third: decisions/9003-third.md\n",
+        )
+        out, _ = self._add(tmp_path, text, 9002)
+        lines = out.split("\n")
+        new = lines.index("          - ADR-9002 New: decisions/9002-new.md")
+        assert lines[new - 1].strip().startswith("- ADR-9001")
+        assert lines[new + 1].strip().startswith("- ADR-9003")
+
+    def test_first_project_adr_goes_before_group_header(self, tmp_path: Path) -> None:
+        text = _MKDOCS_NESTED.replace("      - ADR-0001 Mine: decisions/0001-mine.md\n", "")
+        out, _ = self._add(tmp_path, text, 1)
+        lines = out.split("\n")
+        new = lines.index("      - ADR-0001 New: decisions/0001-new.md")
+        assert lines[new + 1].strip() == "- Template Decisions:"
+
+    def test_template_adr_without_series_goes_at_block_end(self, tmp_path: Path) -> None:
+        text = (
+            "nav:\n  - Decisions:\n      - Overview: decisions/README.md\n"
+            "      - ADR-0001 Mine: decisions/0001-mine.md\n  - Reference:\n      - API: a.md\n"
+        )
+        out, decisions = self._add(tmp_path, text, 9001)
+        assert decisions[-1] == {"ADR-9001 New": "decisions/9001-new.md"}
+        assert "  - Reference:" in out.split("\n")
+
+    def test_existing_nested_entry_is_not_added_twice(self, tmp_path: Path) -> None:
+        mkdocs = tmp_path / "mkdocs.yml"
+        mkdocs.write_text(_MKDOCS_NESTED, encoding="utf-8")
+        assert adr_module._add_to_nav(mkdocs, 9001, "First", "decisions/9001-first.md")
+        assert mkdocs.read_text(encoding="utf-8") == _MKDOCS_NESTED

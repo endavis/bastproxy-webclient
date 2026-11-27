@@ -1,0 +1,483 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: 'Run the full Python-version matrix (middle versions) instead of the bookend versions.'
+        required: false
+        type: boolean
+        default: false
+      all_os:
+        description: 'Run every Python version on all three operating systems, not just Linux plus Windows on the newest.'
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      full_matrix:
+        description: 'Run the full Python-version matrix (middle versions) instead of the bookend versions.'
+        required: false
+        type: boolean
+        default: false
+      all_os:
+        description: 'Run every Python version on all three operating systems, not just Linux plus Windows on the newest.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      oldest: ${{ steps.pv.outputs.oldest }}
+      newest: ${{ steps.pv.outputs.newest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/python-versions.json
+            .github/actions/python-versions
+          sparse-checkout-cone-mode: false
+
+      - id: pv
+        uses: ./.github/actions/python-versions
+
+      - name: Set matrix based on config and label
+        id: set-matrix
+        env:
+          OLDEST: ${{ steps.pv.outputs.oldest }}
+          NEWEST: ${{ steps.pv.outputs.newest }}
+          FULL_MATRIX: ${{ inputs.full_matrix }}
+          ALL_OS: ${{ inputs.all_os }}
+        run: |
+          oldest="$OLDEST"
+          newest="$NEWEST"
+
+          oldest_minor=${oldest#3.}
+          newest_minor=${newest#3.}
+
+          # Versions to test: middle versions only for the full matrix
+          # (bookends are already tested), else the bookends.
+          versions=()
+          if [[ "$FULL_MATRIX" == "true" ]]; then
+            for ((i=oldest_minor+1; i<newest_minor; i++)); do
+              versions+=("3.$i")
+            done
+          else
+            versions=("$oldest" "$newest")
+          fi
+
+          if [[ ${#versions[@]} -eq 0 ]]; then
+            echo "No middle versions to test (oldest=$oldest, newest=$newest)"
+            echo 'matrix={"include":[]}' >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # all_os=true: every version on every OS. Otherwise Linux for every
+          # version, plus Windows (the platform that has caught real
+          # failures) on the newest version only; macOS runs nightly and on
+          # release (#1190).
+          include=""
+          for v in "${versions[@]}"; do
+            oses=(ubuntu-latest)
+            if [[ "$ALL_OS" == "true" ]]; then
+              oses=(ubuntu-latest windows-latest macos-latest)
+            elif [[ "$v" == "$newest" ]]; then
+              oses+=(windows-latest)
+            fi
+            for os in "${oses[@]}"; do
+              include="${include:+$include,}{\"os\":\"$os\",\"python-version\":\"$v\"}"
+            done
+          done
+          echo "Matrix: $include"
+          echo "matrix={\"include\":[$include]}" >> $GITHUB_OUTPUT
+
+  test:
+    needs: setup
+    if: ${{ needs.setup.outputs.matrix != '{"include":[]}' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    env:
+      HYPOTHESIS_PROFILE: ci
+      # uv builds .venv from .python-version unless told otherwise (#1261).
+      UV_PYTHON: ${{ matrix.python-version }}
+
+    steps:
+      # No Windows git config step: the checkout uses Git's defaults, as a
+      # developer's does (core.autocrlf=true). .gitattributes pins eol=lf (#1288),
+      # and the doit steps below fail if that stops working (#1293).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - id: setup-uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # Logs whether the uv cache was restored, so a slow install can be told from a cold cache
+      # (#1329). No `uv run` here: the Python check below must be the first one.
+      - name: Log the uv cache result
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.setup-uv.outputs.cache-hit }}
+        run: 'echo "uv cache hit: ${CACHE_HIT:-unknown}"'
+
+      - name: Install dependencies
+        id: install
+        run: uv sync --all-extras --dev
+
+      # Fails the job when uv runs another Python than the one requested
+      # above (#1261). Assumes the requested version is in X.Y form.
+      - name: Check the Python version
+        shell: bash
+        run: >-
+          uv run python -c 'import os, sys;
+          v = "%d.%d" % sys.version_info[:2];
+          want = os.environ["UV_PYTHON"];
+          print("uv runs Python " + v + ", requested " + want);
+          sys.exit(0 if v == want else 1)'
+
+      # --durations stay on (#1321): -v lists every test, so the table adds only the tests
+      # over 0.05s, and a later slowdown shows in the log.
+      - name: Run tests
+        run: uv run pytest -n auto -v --durations=0 --durations-min=0.05 --junitxml=tmp/junit.xml --ignore=tests/benchmarks/
+
+      # These two run before the Windows doit steps: `doit cleanup` empties tmp/ (#1329).
+      - name: Summarize the test results
+        if: ${{ always() && steps.install.outcome == 'success' }}
+        shell: bash
+        env:
+          TITLE: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+        run: uv run python tools/junit_summary.py tmp/junit.xml --title "$TITLE"
+
+      - name: Upload the JUnit report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-test-${{ matrix.os }}-${{ matrix.python-version }}
+          path: tmp/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+          overwrite: true
+
+      # Windows only: run doit tasks end to end, the way a Windows developer
+      # does (#1293). Each guards a bug that reached main because pytest alone
+      # does not run doit. The lint job covers the same tasks on Linux.
+      #
+      # format_check: ruff on a checkout made with autocrlf=true (#1288).
+      - name: Check code formatting (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.install.outcome == 'success' }}
+        run: uv run doit format_check
+
+      # security: install_check_or_skip runs bandit through cmd.exe (#1291).
+      - name: Run security scan (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.install.outcome == 'success' }}
+        run: uv run doit security
+
+      # cleanup: prints a Rich panel with a non-cp1252 character through doit's
+      # piped stdout, which defaults to cp1252 on a runner (#1287). Last, since
+      # it deletes caches.
+      - name: Run cleanup (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.install.outcome == 'success' }}
+        run: uv run doit cleanup
+
+  # Coverage runs in its own job so the slower measured run does not make one
+  # matrix entry the slowest Linux job (#1260). Skipped on full_matrix runs,
+  # which test only the middle versions.
+  coverage:
+    needs: setup
+    if: ${{ !inputs.full_matrix }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # id-token: write lets the Codecov upload authenticate with OIDC. The
+    # calling workflow must grant it too, or GitHub rejects the call.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      HYPOTHESIS_PROFILE: ci
+      # uv builds .venv from .python-version unless told otherwise (#1261).
+      UV_PYTHON: ${{ needs.setup.outputs.newest }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ needs.setup.outputs.newest }}
+
+      - id: setup-uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # Logs whether the uv cache was restored, so a slow install can be told from a cold cache
+      # (#1329). No `uv run` here: the Python check below must be the first one.
+      - name: Log the uv cache result
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.setup-uv.outputs.cache-hit }}
+        run: 'echo "uv cache hit: ${CACHE_HIT:-unknown}"'
+
+      - name: Install dependencies
+        id: install
+        run: uv sync --all-extras --dev
+
+      # Fails the job when uv runs another Python than the one requested
+      # above (#1261). Assumes the requested version is in X.Y form.
+      - name: Check the Python version
+        shell: bash
+        run: >-
+          uv run python -c 'import os, sys;
+          v = "%d.%d" % sys.version_info[:2];
+          want = os.environ["UV_PYTHON"];
+          print("uv runs Python " + v + ", requested " + want);
+          sys.exit(0 if v == want else 1)'
+
+      # --durations stay on (#1321): -v lists every test, so the table adds only the tests
+      # over 0.05s, and a later slowdown shows in the log.
+      - name: Run tests with coverage
+        env:
+          # Logs which coverage core (sysmon or ctrace) ran.
+          COVERAGE_DEBUG: core
+          COVERAGE_DEBUG_FILE: tmp/coverage-debug.txt
+        run: |
+          mkdir -p tmp
+          uv run pytest -n auto --cov --cov-report=xml:tmp/coverage.xml --cov-report=term -v --durations=0 --durations-min=0.05 --junitxml=tmp/junit.xml --ignore=tests/benchmarks/
+
+      - name: Show the coverage core
+        if: always()
+        run: grep "Using core=" tmp/coverage-debug.txt || echo "No coverage core line found"
+
+      - name: Summarize the test results
+        if: ${{ always() && steps.install.outcome == 'success' }}
+        run: uv run python tools/junit_summary.py tmp/junit.xml --title "Coverage run"
+
+      - name: Upload the JUnit report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-coverage
+          path: tmp/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+          overwrite: true
+
+      - name: Upload coverage to Codecov
+        if: vars.CODECOV_ENABLED == 'true'
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: ./tmp/coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          use_oidc: true
+          disable_search: true
+
+  docs:
+    needs: setup
+    if: ${{ needs.setup.outputs.matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # uv builds .venv from .python-version unless told otherwise (#1261).
+      UV_PYTHON: ${{ needs.setup.outputs.newest }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ needs.setup.outputs.newest }}
+
+      - id: setup-uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # Logs whether the uv cache was restored, so a slow install can be told from a cold cache
+      # (#1329). No `uv run` here: the Python check below must be the first one.
+      - name: Log the uv cache result
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.setup-uv.outputs.cache-hit }}
+        run: 'echo "uv cache hit: ${CACHE_HIT:-unknown}"'
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      # Fails the job when uv runs another Python than the one requested
+      # above (#1261). Assumes the requested version is in X.Y form.
+      - name: Check the Python version
+        shell: bash
+        run: >-
+          uv run python -c 'import os, sys;
+          v = "%d.%d" % sys.version_info[:2];
+          want = os.environ["UV_PYTHON"];
+          print("uv runs Python " + v + ", requested " + want);
+          sys.exit(0 if v == want else 1)'
+
+      - name: Build documentation
+        run: uv run doit docs_build
+
+  lint:
+    needs: setup
+    if: ${{ needs.setup.outputs.matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # uv builds .venv from .python-version unless told otherwise (#1261).
+      UV_PYTHON: ${{ needs.setup.outputs.newest }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ needs.setup.outputs.newest }}
+
+      - id: setup-uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # Logs whether the uv cache was restored, so a slow install can be told from a cold cache
+      # (#1329). No `uv run` here: the Python check below must be the first one.
+      - name: Log the uv cache result
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.setup-uv.outputs.cache-hit }}
+        run: 'echo "uv cache hit: ${CACHE_HIT:-unknown}"'
+
+      - name: Install dependencies
+        id: install
+        run: uv sync --all-extras --dev
+
+      # Fails the job when uv runs another Python than the one requested
+      # above (#1261). Assumes the requested version is in X.Y form.
+      - name: Check the Python version
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: bash
+        run: >-
+          uv run python -c 'import os, sys;
+          v = "%d.%d" % sys.version_info[:2];
+          want = os.environ["UV_PYTHON"];
+          print("uv runs Python " + v + ", requested " + want);
+          sys.exit(0 if v == want else 1)'
+
+      # Each check runs whether or not the one before it failed, so a PR shows
+      # every failing check at once instead of one per push (#952).
+      - name: Check environment drift
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit env_check
+
+      - name: Check code formatting
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit format_check
+
+      - name: Run linting
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit lint
+
+      - name: Run type checking
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit type_check
+
+      - name: Find dead code
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit deadcode
+
+      - name: Run security scan
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit security
+
+      - name: Run spell check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit spell_check
+
+      - name: Run dependency audit
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit audit
+
+      - name: Check the built wheel
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run doit wheel_check
+
+  ci-complete:
+    if: always()
+    needs: [setup, test, coverage, lint, docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check CI status
+        run: |
+          setup_result="${{ needs.setup.result }}"
+          test_result="${{ needs.test.result }}"
+          coverage_result="${{ needs.coverage.result }}"
+          lint_result="${{ needs.lint.result }}"
+          docs_result="${{ needs.docs.result }}"
+
+          echo "Setup result: $setup_result"
+          echo "Test result: $test_result"
+          echo "Coverage result: $coverage_result"
+          echo "Lint result: $lint_result"
+          echo "Docs result: $docs_result"
+
+          # Setup must succeed
+          if [[ "$setup_result" != "success" ]]; then
+            echo "Setup job failed"
+            exit 1
+          fi
+
+          # Test must succeed or be skipped (skipped = no middle versions)
+          if [[ "$test_result" != "success" && "$test_result" != "skipped" ]]; then
+            echo "Test job failed"
+            exit 1
+          fi
+
+          # Coverage must succeed or be skipped (skipped = full_matrix run)
+          if [[ "$coverage_result" != "success" && "$coverage_result" != "skipped" ]]; then
+            echo "Coverage job failed"
+            exit 1
+          fi
+
+          # Lint must succeed or be skipped (skipped = no middle versions)
+          if [[ "$lint_result" != "success" && "$lint_result" != "skipped" ]]; then
+            echo "Lint job failed"
+            exit 1
+          fi
+
+          # Docs must succeed or be skipped (skipped = no middle versions)
+          if [[ "$docs_result" != "success" && "$docs_result" != "skipped" ]]; then
+            echo "Docs job failed"
+            exit 1
+          fi
+
+          echo "CI completed successfully"

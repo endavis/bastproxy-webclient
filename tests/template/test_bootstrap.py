@@ -1,0 +1,719 @@
+"""Tests for bootstrap.py setup and sync functionality."""
+
+from __future__ import annotations
+
+import ast
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+import bootstrap
+from bootstrap import (
+    TEMPLATE_MODULES,
+    create_settings_file,
+    detect_project_settings,
+    download_file,
+    parse_args,
+    pin_base_url,
+    resolve_ref,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PACKAGE_DIR = REPO_ROOT / "tools" / "pyproject_template"
+
+# What bootstrap imports after downloading. ``__init__`` is included because
+# importing any submodule as ``tools.pyproject_template.<name>`` executes the
+# package body first -- the detail that broke the setup path in #790.
+ENTRY_POINTS = ("__init__", "setup_repo", "manage")
+
+
+def _sibling_imports(module_path: Path, package_modules: frozenset[str]) -> set[str]:
+    """Names of package siblings imported by ``module_path``.
+
+    Both import styles used in the package count: the relative
+    ``from .settings import X`` in ``__init__.py``, and the bare
+    ``from settings import X`` the modules use when run as scripts, which
+    resolves through their own ``sys.path.insert(_script_dir)``.
+    """
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            candidates = [node.module] if node.module else []
+        elif isinstance(node, ast.Import):
+            candidates = [alias.name for alias in node.names]
+        else:
+            continue
+        found.update(name for name in candidates if name in package_modules)
+    return found
+
+
+class TestConstants:
+    """Tests for the module list both bootstrap paths download.
+
+    These replace four assertions that checked whether hand-picked filenames
+    appeared in a hand-maintained list. That shape cannot catch the defect it
+    existed to prevent: the two former lists each named plausible modules while
+    omitting ones their own entry points import, so neither bootstrap path
+    could import what it had just downloaded (#790, #788). One of them even
+    asserted the omission was deliberate. The tests below assert the properties
+    that hold the list to the code instead.
+    """
+
+    def test_template_modules_is_every_module_in_the_package(self) -> None:
+        """The list is the package, so a new module cannot be left out.
+
+        A module added to ``tools/pyproject_template/`` but not here would not
+        be downloaded by either path, and the failure would surface as a
+        ``ModuleNotFoundError`` in a consumer project rather than in this suite.
+        """
+        on_disk = sorted(
+            f"tools/pyproject_template/{path.name}" for path in PACKAGE_DIR.glob("*.py")
+        )
+        assert sorted(TEMPLATE_MODULES) == on_disk
+
+    def test_template_modules_is_closed_under_its_entry_points_imports(self) -> None:
+        """Everything reachable from an entry point is in the list.
+
+        This is the property #790 and #788 both violated, and it is asserted
+        independently of the completeness test above so that it still holds if
+        the list is ever narrowed again. It is static because the import edges
+        that broke are not exercised by any test: ``manage.py`` imports
+        ``repo_settings`` and ``setup_repo`` lazily, inside subcommand bodies
+        that need a real GitHub repository to run.
+        """
+        package_modules = frozenset(path.stem for path in PACKAGE_DIR.glob("*.py"))
+
+        reachable: set[str] = set()
+        queue = list(ENTRY_POINTS)
+        while queue:
+            name = queue.pop()
+            if name in reachable:
+                continue
+            reachable.add(name)
+            queue.extend(_sibling_imports(PACKAGE_DIR / f"{name}.py", package_modules))
+
+        listed = {Path(rel).stem for rel in TEMPLATE_MODULES}
+        assert reachable <= listed, (
+            f"TEMPLATE_MODULES is not import-closed; reachable but not downloaded: "
+            f"{sorted(reachable - listed)}"
+        )
+
+    def test_downloaded_modules_actually_import(self, tmp_path: Path) -> None:
+        """The real files, and only the listed ones, import in a clean interpreter.
+
+        The end-to-end form of the two tests above, and the direct reproduction
+        of #790 and #788: materialise exactly what bootstrap writes to disk,
+        then perform bootstrap's own import in a subprocess so no path this
+        suite has already primed can mask a missing module.
+        """
+        pkg_dir = tmp_path / "tools" / "pyproject_template"
+        pkg_dir.mkdir(parents=True)
+        for rel_path in TEMPLATE_MODULES:
+            shutil.copy(REPO_ROOT / rel_path, pkg_dir / Path(rel_path).name)
+
+        program = (
+            "import sys; sys.path.insert(0, '.')\n"
+            "from tools.pyproject_template.setup_repo import main\n"
+            "from tools.pyproject_template import manage\n"
+            "assert manage is not None\n"
+        )
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        result = subprocess.run(
+            [sys.executable, "-E", "-c", program],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+            env=env,
+        )
+
+        assert result.returncode == 0, (
+            f"bootstrap's own import failed against TEMPLATE_MODULES:\n{result.stderr}"
+        )
+
+
+class TestParseArgs:
+    """Tests for argument parsing."""
+
+    def test_no_args_defaults_to_setup_mode(self) -> None:
+        """Test that no arguments means sync=False (setup mode)."""
+        args = parse_args([])
+        assert args.sync is False
+
+    def test_sync_flag(self) -> None:
+        """Test that --sync flag is parsed correctly."""
+        args = parse_args(["--sync"])
+        assert args.sync is True
+
+    def test_yes_flag(self) -> None:
+        """--yes and -y are accepted and default to False (#1070)."""
+        assert parse_args(["--sync"]).yes is False
+        assert parse_args(["--sync", "--yes"]).yes is True
+        assert parse_args(["--sync", "-y"]).yes is True
+
+
+class TestDownloadFile:
+    """Tests for download_file function."""
+
+    def test_download_file_writes_content(self, tmp_path: Path) -> None:
+        """Test that download_file writes fetched content to disk."""
+        dest = tmp_path / "test.py"
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"print('hello')"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with patch("bootstrap.urllib.request.urlopen", return_value=mock_response):
+            download_file("https://example.com/test.py", dest)
+
+        assert dest.read_text(encoding="utf-8") == "print('hello')"
+
+    def test_download_file_exits_on_error(self, tmp_path: Path) -> None:
+        """Test that download_file exits on network error."""
+        dest = tmp_path / "test.py"
+
+        with (
+            patch("bootstrap.urllib.request.urlopen", side_effect=Exception("Network error")),
+            pytest.raises(SystemExit),
+        ):
+            download_file("https://example.com/test.py", dest)
+
+
+class TestDetectProjectSettings:
+    """Tests for detect_project_settings function."""
+
+    def test_returns_empty_when_no_pyproject(self, tmp_path: Path) -> None:
+        """Test that missing pyproject.toml returns empty settings."""
+        result = detect_project_settings(tmp_path)
+        assert result == {}
+
+    def test_detects_project_name(self, tmp_path: Path) -> None:
+        """Test that project name is detected from pyproject.toml."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "my-cool-project"\n', encoding="utf-8")
+
+        result = detect_project_settings(tmp_path)
+        assert result["project_name"] == "my-cool-project"
+        assert result["package_name"] == "my_cool_project"
+        assert result["pypi_name"] == "my-cool-project"
+
+    def test_detects_description(self, tmp_path: Path) -> None:
+        """Test that description is detected."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "test"\ndescription = "A test project"\n', encoding="utf-8"
+        )
+
+        result = detect_project_settings(tmp_path)
+        assert result["description"] == "A test project"
+
+    def test_detects_author_info(self, tmp_path: Path) -> None:
+        """Test that author name and email are detected."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "test"\n'
+            '[[project.authors]]\nname = "John Doe"\nemail = "john@example.com"\n',
+            encoding="utf-8",
+        )
+
+        result = detect_project_settings(tmp_path)
+        assert result["author_name"] == "John Doe"
+        assert result["author_email"] == "john@example.com"
+
+    def test_detects_github_from_urls(self, tmp_path: Path) -> None:
+        """Test that GitHub user/repo are parsed from repository URL."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "test"\n'
+            '[project.urls]\nRepository = "https://github.com/myuser/myrepo"\n',
+            encoding="utf-8",
+        )
+
+        result = detect_project_settings(tmp_path)
+        assert result["github_user"] == "myuser"
+        assert result["github_repo"] == "myrepo"
+
+    def test_strips_git_suffix_from_repo_url(self, tmp_path: Path) -> None:
+        """Test that .git suffix is removed from repository URL."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "test"\n'
+            '[project.urls]\nRepository = "https://github.com/user/repo.git"\n',
+            encoding="utf-8",
+        )
+
+        result = detect_project_settings(tmp_path)
+        assert result["github_repo"] == "repo"
+
+    def test_handles_malformed_pyproject(self, tmp_path: Path) -> None:
+        """Test that malformed pyproject.toml doesn't crash."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("this is not valid toml [[[", encoding="utf-8")
+
+        result = detect_project_settings(tmp_path)
+        assert result == {}
+
+    def test_handles_empty_project_section(self, tmp_path: Path) -> None:
+        """Test that empty [project] section returns empty settings."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("[project]\n", encoding="utf-8")
+
+        result = detect_project_settings(tmp_path)
+        assert result == {}
+
+    def test_rejects_non_github_url_with_github_in_path(self, tmp_path: Path) -> None:
+        """Test that URLs with github.com in path (not host) are rejected."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "test"\n'
+            '[project.urls]\nRepository = "https://evil.com/github.com/user/repo"\n',
+            encoding="utf-8",
+        )
+
+        result = detect_project_settings(tmp_path)
+        assert "github_user" not in result
+        assert "github_repo" not in result
+
+    def test_accepts_github_subdomain(self, tmp_path: Path) -> None:
+        """Test that GitHub subdomain URLs are accepted."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "test"\n'
+            '[project.urls]\nRepository = "https://www.github.com/myuser/myrepo"\n',
+            encoding="utf-8",
+        )
+
+        result = detect_project_settings(tmp_path)
+        assert result["github_user"] == "myuser"
+        assert result["github_repo"] == "myrepo"
+
+    def test_underscore_name_converted_to_hyphen_for_pypi(self, tmp_path: Path) -> None:
+        """Test that underscores in name become hyphens for pypi_name."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "my_project"\n', encoding="utf-8")
+
+        result = detect_project_settings(tmp_path)
+        assert result["pypi_name"] == "my-project"
+        assert result["package_name"] == "my_project"
+
+
+class TestCreateSettingsFile:
+    """Tests for create_settings_file function."""
+
+    def test_creates_directory_structure(self, tmp_path: Path) -> None:
+        """Test that parent directories are created."""
+        create_settings_file(tmp_path, {})
+
+        settings_dir = tmp_path / ".config" / "pyproject_template"
+        assert settings_dir.exists()
+
+    def test_creates_settings_file(self, tmp_path: Path) -> None:
+        """Test that settings.toml is created."""
+        result = create_settings_file(tmp_path, {})
+
+        assert result.exists()
+        assert result.name == "settings.toml"
+
+    def test_writes_project_section(self, tmp_path: Path) -> None:
+        """Test that [project] section is written with settings."""
+        settings = {
+            "project_name": "my-project",
+            "package_name": "my_project",
+            "github_user": "testuser",
+        }
+        result = create_settings_file(tmp_path, settings)
+
+        content = result.read_text(encoding="utf-8")
+        assert "[project]" in content
+        assert 'project_name = "my-project"' in content
+        assert 'package_name = "my_project"' in content
+        assert 'github_user = "testuser"' in content
+
+    def test_writes_template_section(self, tmp_path: Path) -> None:
+        """Test that [template] section is written with empty values."""
+        result = create_settings_file(tmp_path, {})
+
+        content = result.read_text(encoding="utf-8")
+        assert "[template]" in content
+        assert 'commit = ""' in content
+        assert 'commit_date = ""' in content
+
+    def test_empty_settings_writes_empty_strings(self, tmp_path: Path) -> None:
+        """Test that missing settings are written as empty strings."""
+        result = create_settings_file(tmp_path, {})
+
+        content = result.read_text(encoding="utf-8")
+        assert 'project_name = ""' in content
+        assert 'author_email = ""' in content
+
+    def test_escapes_special_characters(self, tmp_path: Path) -> None:
+        """Test that special characters in values are escaped."""
+        settings = {"description": 'A "quoted" project\\path'}
+        result = create_settings_file(tmp_path, settings)
+
+        content = result.read_text(encoding="utf-8")
+        assert 'description = "A \\"quoted\\" project\\\\path"' in content
+
+    def test_returns_path_to_created_file(self, tmp_path: Path) -> None:
+        """Test that the returned path points to the created file."""
+        result = create_settings_file(tmp_path, {"project_name": "test"})
+
+        expected = tmp_path / ".config" / "pyproject_template" / "settings.toml"
+        assert result == expected
+
+
+class TestRunSync:
+    """Tests for run_sync function."""
+
+    def test_creates_tools_directory(self, tmp_path: Path) -> None:
+        """Test that tools/pyproject_template/ is created."""
+        from bootstrap import run_sync
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"# file content"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("bootstrap.urllib.request.urlopen", return_value=mock_response),
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+            run_sync(tmp_path)
+
+        pkg_dir = tmp_path / "tools" / "pyproject_template"
+        assert pkg_dir.exists()
+
+    def test_downloads_all_sync_files(self, tmp_path: Path) -> None:
+        """Test that all TEMPLATE_MODULES are downloaded."""
+        from bootstrap import run_sync
+
+        downloaded_urls: list[str] = []
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"# content"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        def track_downloads(url: str) -> MagicMock:
+            downloaded_urls.append(url)
+            return mock_response
+
+        with (
+            patch("bootstrap.urllib.request.urlopen", side_effect=track_downloads),
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+            run_sync(tmp_path)
+
+        # Verify each sync file was downloaded
+        for file_path in TEMPLATE_MODULES:
+            filename = Path(file_path).name
+            expected_url_suffix = f"/{file_path}"
+            assert any(url.endswith(expected_url_suffix) for url in downloaded_urls), (
+                f"{filename} was not downloaded"
+            )
+
+    def test_prompts_if_already_installed(self, tmp_path: Path) -> None:
+        """Test that existing installation prompts for confirmation."""
+        from bootstrap import run_sync
+
+        pkg_dir = tmp_path / "tools" / "pyproject_template"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "manage.py").write_text("# existing", encoding="utf-8")
+
+        with (
+            patch("builtins.input", return_value="n"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            run_sync(tmp_path)
+
+        assert exc_info.value.code == 0
+
+    def test_overwrites_if_confirmed(self, tmp_path: Path) -> None:
+        """Test that existing installation is overwritten when confirmed."""
+        from bootstrap import run_sync
+
+        pkg_dir = tmp_path / "tools" / "pyproject_template"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "manage.py").write_text("# old", encoding="utf-8")
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"# new content"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("builtins.input", return_value="y"),
+            patch("bootstrap.urllib.request.urlopen", return_value=mock_response),
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+            run_sync(tmp_path)
+
+        assert (pkg_dir / "manage.py").read_text(encoding="utf-8") == "# new content"
+
+    def test_creates_settings_file(self, tmp_path: Path) -> None:
+        """Test that settings.toml is created during sync."""
+        from bootstrap import run_sync
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"# content"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("bootstrap.urllib.request.urlopen", return_value=mock_response),
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+            run_sync(tmp_path)
+
+        settings_path = tmp_path / ".config" / "pyproject_template" / "settings.toml"
+        assert settings_path.exists()
+
+    def test_keeps_existing_settings_file(self, tmp_path: Path) -> None:
+        """A re-run keeps settings.toml, and with it the recorded sync point (#1008)."""
+        from bootstrap import run_sync
+
+        pkg_dir = tmp_path / "tools" / "pyproject_template"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "manage.py").write_text("# old", encoding="utf-8")
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "renamed-project"\n', encoding="utf-8"
+        )
+        settings_path = tmp_path / ".config" / "pyproject_template" / "settings.toml"
+        settings_path.parent.mkdir(parents=True)
+        existing = (
+            '[project]\nproject_name = "my-project"\n\n'
+            '[template]\ncommit = "abc1234"\ncommit_date = "2026-10-01"\n'
+        )
+        settings_path.write_text(existing, encoding="utf-8")
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"# new content"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("builtins.input", return_value="y"),
+            patch("bootstrap.urllib.request.urlopen", return_value=mock_response),
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+            run_sync(tmp_path)
+
+        assert settings_path.read_text(encoding="utf-8") == existing
+        assert (pkg_dir / "manage.py").read_text(encoding="utf-8") == "# new content"
+
+    def test_assume_yes_skips_prompt_and_overwrites(self, tmp_path: Path) -> None:
+        """assume_yes=True never prompts and downloads over the install (#1070)."""
+        from bootstrap import run_sync
+
+        pkg_dir = tmp_path / "tools" / "pyproject_template"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "manage.py").write_text("# old", encoding="utf-8")
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"# new content"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("builtins.input") as mock_input,
+            patch("bootstrap.urllib.request.urlopen", return_value=mock_response),
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+            run_sync(tmp_path, assume_yes=True)
+
+        mock_input.assert_not_called()
+        assert (pkg_dir / "manage.py").read_text(encoding="utf-8") == "# new content"
+
+    def test_eof_on_prompt_exits_with_hint(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """No terminal to answer from exits 1 pointing at --yes, no download (#1070)."""
+        from bootstrap import run_sync
+
+        pkg_dir = tmp_path / "tools" / "pyproject_template"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "manage.py").write_text("# old", encoding="utf-8")
+
+        with (
+            patch("builtins.input", side_effect=EOFError),
+            patch("bootstrap.urllib.request.urlopen") as mock_urlopen,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            run_sync(tmp_path)
+
+        assert exc_info.value.code == 1
+        assert "--yes" in capsys.readouterr().err
+        mock_urlopen.assert_not_called()
+        assert (pkg_dir / "manage.py").read_text(encoding="utf-8") == "# old"
+
+    def test_piped_script_fails_cleanly_without_yes(self, tmp_path: Path) -> None:
+        """Piping the script to python3 --sync exits 1 with a hint, not a traceback (#1070)."""
+        pkg_dir = tmp_path / "tools" / "pyproject_template"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "manage.py").write_text("# old", encoding="utf-8")
+        # Bytes, as curl pipes them: text mode would re-encode the UTF-8 source
+        # in the locale encoding (cp1252 on Windows), which Python then rejects.
+        source = (REPO_ROOT / "bootstrap.py").read_bytes()
+
+        result = subprocess.run(
+            [sys.executable, "-", "--sync"],
+            input=source,
+            capture_output=True,
+            cwd=tmp_path,
+            check=False,
+            timeout=60,
+        )
+        stdout = result.stdout.decode(errors="replace")
+        stderr = result.stderr.decode(errors="replace")
+
+        assert result.returncode == 1
+        assert "Traceback" not in stderr
+        assert "--yes" in stdout + stderr
+
+
+class TestRunSetup:
+    """Tests for run_setup function (original behavior)."""
+
+    def test_downloads_setup_files_to_temp_dir(self) -> None:
+        """Test that setup mode downloads TEMPLATE_MODULES to a temp directory."""
+        from bootstrap import run_setup
+
+        downloaded_urls: list[str] = []
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"# content"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        def track_downloads(url: str) -> MagicMock:
+            downloaded_urls.append(url)
+            return mock_response
+
+        with (
+            patch("bootstrap.urllib.request.urlopen", side_effect=track_downloads),
+            pytest.raises(SystemExit),
+        ):
+            run_setup()
+
+        # Verify setup files were downloaded
+        for file_path in TEMPLATE_MODULES:
+            assert any(url.endswith(f"/{file_path}") for url in downloaded_urls), (
+                f"{file_path} was not downloaded"
+            )
+
+
+class TestMain:
+    """Tests for main entry point."""
+
+    def test_sync_flag_calls_run_sync(self) -> None:
+        """Test that --sync flag routes to run_sync."""
+        from bootstrap import main
+
+        with patch("bootstrap.run_sync") as mock_sync:
+            main(["--sync"])
+            mock_sync.assert_called_once()
+
+    def test_no_flags_calls_run_setup(self) -> None:
+        """Test that no flags routes to run_setup."""
+        from bootstrap import main
+
+        with patch("bootstrap.run_setup") as mock_setup:
+            main([])
+            mock_setup.assert_called_once()
+
+
+class TestRefPinning:
+    """`main` is resolved to one commit before any file is fetched (#694).
+
+    bootstrap downloads up to a dozen files from a moving ref. A push landing
+    mid-run produces a mixed file set, and the same command run twice can
+    install different code. Pinning makes a run internally consistent and its
+    result recordable.
+
+    This does not defend against the template repository being malicious —
+    `curl | python3` already extends that trust. It closes the window where the
+    ref moves underneath a run.
+    """
+
+    def test_full_sha_is_passed_through_unresolved(self) -> None:
+        """An explicit commit needs no API call — and must not make one."""
+        sha = "0123456789abcdef0123456789abcdef01234567"
+        with patch("bootstrap.urllib.request.urlopen") as mock_open:
+            assert resolve_ref(sha) == sha
+        mock_open.assert_not_called()
+
+    def test_branch_resolves_to_the_returned_sha(self) -> None:
+        sha = "a" * 40
+        response = MagicMock()
+        response.read.return_value = sha.encode()
+        response.__enter__ = lambda self: self
+        response.__exit__ = lambda *a: None
+
+        with patch("bootstrap.urllib.request.urlopen", return_value=response):
+            assert resolve_ref("main") == sha
+
+    def test_unreachable_api_falls_back_to_the_ref(self) -> None:
+        """Offline or rate-limited must not turn a small gain into an outage."""
+        with patch("bootstrap.urllib.request.urlopen", side_effect=OSError("offline")):
+            assert resolve_ref("main") == "main"
+
+    def test_garbage_response_falls_back_to_the_ref(self) -> None:
+        """A proxy or error page must not be pasted into the download URL."""
+        response = MagicMock()
+        response.read.return_value = b"<html>rate limited</html>"
+        response.__enter__ = lambda self: self
+        response.__exit__ = lambda *a: None
+
+        with patch("bootstrap.urllib.request.urlopen", return_value=response):
+            assert resolve_ref("main") == "main"
+
+    def test_pin_base_url_rewrites_the_download_base(self) -> None:
+        """Every subsequent download must come from the pinned commit."""
+        sha = "b" * 40
+        original = bootstrap.BASE_URL
+        try:
+            with patch("bootstrap.resolve_ref", return_value=sha):
+                assert pin_base_url() == sha
+            assert bootstrap.BASE_URL.endswith(f"/{sha}")
+            assert "/main" not in bootstrap.BASE_URL
+        finally:
+            bootstrap.BASE_URL = original
+
+    def test_pinning_happens_before_any_file_is_fetched(self) -> None:
+        """Ordering is the whole point: a pin applied after the first download
+        would leave that file from a different commit.
+
+        Both paths share one marker now that they share one list, so every
+        occurrence is checked rather than the first -- ``str.index`` would
+        otherwise assert twice about ``run_sync`` and never about ``run_setup``.
+        """
+        marker = "for file_path in TEMPLATE_MODULES:"
+        source = (Path(__file__).resolve().parents[2] / "bootstrap.py").read_text("utf-8")
+
+        loops = []
+        start = source.find(marker)
+        while start != -1:
+            loops.append(start)
+            start = source.find(marker, start + 1)
+
+        assert len(loops) == 2, f"expected one download loop per bootstrap path, found {len(loops)}"
+
+        for loop in loops:
+            preceding = source.rindex("pin_base_url()", 0, loop)
+            between = source[preceding:loop]
+            assert "download_file(" not in between, (
+                f"a download happens between pin_base_url() and the loop at offset {loop}"
+            )
